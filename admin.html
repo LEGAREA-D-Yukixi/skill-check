@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SkillCheck 管理 — 株式会社LEGAREA</title>
+<style>
+:root{
+  --navy-900:#0a1c44; --navy-700:#1a3d85; --blue:#1d4ed8; --blue-300:#7fa8f5; --blue-100:#e6eefc;
+  --orange:#f59e0b; --paper:#fff; --ink:#16223f; --muted:#5f6f92; --line:#dde5f2;
+  --ok:#0e9f6e; --ng:#e02424; --shadow:0 10px 30px rgba(6,20,52,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,system-ui,sans-serif;
+  color:var(--ink);line-height:1.6;min-height:100vh;
+  background:radial-gradient(1000px 560px at 10% -6%,#2a55b5 0%,rgba(42,85,181,0) 60%),
+             linear-gradient(170deg,var(--navy-900),#08152f);
+  background-attachment:fixed;padding-top:env(safe-area-inset-top,0px);
+}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 16px 50px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.brand .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(140deg,#3f7ee3,#152d54);
+  display:grid;place-items:center;color:var(--orange);font-weight:800;font-size:16px}
+.brand b{color:#fff;font-size:16px;letter-spacing:.04em;display:block}
+.brand span{color:var(--blue-300);font-size:11.5px;letter-spacing:.13em}
+.card{background:var(--paper);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.pad{padding:22px}
+.screen{display:none}.screen.on{display:block}
+h2{font-size:19px;font-weight:800}
+p.lead{color:var(--muted);font-size:13px;margin-top:5px}
+.field{margin-top:16px}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.field input,.field select{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fbfcfe;font-size:15px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border:1.5px solid transparent;
+  border-radius:11px;font-weight:700;font-size:14px;cursor:pointer}
+.btn-primary{background:linear-gradient(135deg,#2563eb,#1538a0);color:#fff}
+.btn-ghost{background:#fff;border-color:var(--line)}
+.btn-ghost:hover{background:#f4f7fd}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.block{width:100%}
+.login{max-width:400px;margin:8vh auto 0}
+.err{color:var(--ng);font-size:12.5px;margin-top:10px;min-height:1em}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+.toolbar .field{margin-top:0;flex:1;min-width:150px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff}
+.stat b{display:block;font-size:24px;font-weight:800;line-height:1.2}
+.stat span{font-size:11.5px;color:var(--blue-300);letter-spacing:.06em}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:11px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;white-space:nowrap;background:#f7f9fd;position:sticky;top:0}
+tbody tr:hover{background:#f7faff}
+.pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:800}
+.pill.p{background:#e3f6ee;color:var(--ok)} .pill.f{background:#fdeaea;color:var(--ng)}
+.rk{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--blue-100);color:var(--blue);font-weight:800;font-size:12.5px}
+.thumb{width:34px;height:34px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid var(--line);transform:scaleX(-1)}
+.auth-ic{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.tbl-scroll{overflow:auto;max-height:64vh}
+.empty{padding:44px 20px;text-align:center;color:var(--muted);font-size:13.5px}
+.modal{position:fixed;inset:0;background:rgba(6,16,38,.72);display:none;place-items:center;padding:20px;z-index:40}
+.modal.on{display:grid}
+.modal img{max-width:min(460px,90vw);border-radius:14px;transform:scaleX(-1)}
+.note{color:#9fb4dd;font-size:11.5px;margin-top:16px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="mark">LG</div>
+    <div><b>SkillCheck 管理</b><span>受験結果一覧</span></div>
+  </div>
+
+  <!-- ログイン -->
+  <section id="s-login" class="screen on">
+    <div class="card login"><div class="pad">
+      <h2>管理者ログイン</h2>
+      <p class="lead">Supabase に登録された管理者アカウントでログインしてください。</p>
+      <div class="field"><label for="em">メールアドレス</label><input id="em" type="email" autocomplete="username"></div>
+      <div class="field"><label for="pw">パスワード</label><input id="pw" type="password" autocomplete="current-password"></div>
+      <div class="err" id="login-err"></div>
+      <div style="margin-top:16px"><button class="btn btn-primary block" id="btn-login">ログイン</button></div>
+    </div></div>
+  </section>
+
+  <!-- 一覧 -->
+  <section id="s-list" class="screen">
+    <div class="stats">
+      <div class="stat"><span>受験件数</span><b id="st-n">0</b></div>
+      <div class="stat"><span>受験者数</span><b id="st-p">0</b></div>
+      <div class="stat"><span>平均点</span><b id="st-avg">0</b></div>
+      <div class="stat"><span>合格率</span><b id="st-rate">0%</b></div>
+    </div>
+    <div class="card"><div class="pad">
+      <div class="toolbar">
+        <div class="field"><label for="f-name">氏名で絞り込み</label><input id="f-name" type="search" placeholder="氏名"></div>
+        <div class="field" style="max-width:190px"><label for="f-lang">言語</label><select id="f-lang"><option value="">すべて</option></select></div>
+        <div class="field" style="max-width:150px"><label for="f-res">判定</label><select id="f-res">
+          <option value="">すべて</option><option value="1">合格のみ</option><option value="0">不合格のみ</option></select></div>
+        <button class="btn btn-ghost" id="btn-csv">CSV出力</button>
+        <button class="btn btn-ghost" id="btn-reload">再読込</button>
+        <button class="btn btn-ghost" id="btn-logout">ログアウト</button>
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr>
+            <th>受験日時</th><th>氏名</th><th>生年月日</th><th>言語</th>
+            <th>得点</th><th>評価</th><th>判定</th><th>所要</th><th>本人確認</th><th>写真</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="empty" id="empty" style="display:none">該当する受験記録はありません。</div>
+      </div>
+    </div></div>
+    <p class="note">顔写真・生年月日は個人情報です。取り扱いにご注意ください。</p>
+  </section>
+</div>
+
+<div class="modal" id="modal"><img id="modal-img" alt="受験者の顔写真"></div>
+
+<script src="config.js"></script>
+<script>
+(function(){
+'use strict';
+const C = window.SC_CONFIG;
+const $ = function(id){ return document.getElementById(id); };
+let token = sessionStorage.getItem('sc_admin_token') || '';
+let rows = [];
+
+function show(id){ ['s-login','s-list'].forEach(function(s){ $(s).classList.toggle('on', s===id); }); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+async function login(){
+  const b = $('btn-login'); b.disabled = true; b.textContent = 'ログイン中…';
+  $('login-err').textContent = '';
+  try{
+    const res = await fetch(C.SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+      method:'POST',
+      headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ email: $('em').value.trim(), password: $('pw').value }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error_description || j.msg || 'ログインに失敗しました');
+    token = j.access_token;
+    sessionStorage.setItem('sc_admin_token', token);
+    show('s-list'); await load();
+  }catch(e){ $('login-err').textContent = e.message || String(e); }
+  b.disabled = false; b.textContent = 'ログイン';
+}
+
+async function load(){
+  const url = C.SUPABASE_URL + '/rest/v1/sc_results?select=*&order=created_at.desc&limit=1000';
+  const res = await fetch(url, { headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Authorization':'Bearer ' + token } });
+  if (res.status === 401 || res.status === 403){ sessionStorage.removeItem('sc_admin_token'); token=''; show('s-login'); return; }
+  rows = await res.json();
+  if (!Array.isArray(rows)) rows = [];
+  const langs = Array.from(new Set(rows.map(function(r){ return r.lang_label; }))).sort();
+  $('f-lang').innerHTML = '<option value="">すべて</option>' + langs.map(function(l){ return '<option>'+esc(l)+'</option>'; }).join('');
+  render();
+}
+
+function filtered(){
+  const nm = $('f-name').value.trim();
+  const lg = $('f-lang').value;
+  const rs = $('f-res').value;
+  return rows.filter(function(r){
+    if (nm && String(r.candidate_name||'').indexOf(nm) < 0) return false;
+    if (lg && r.lang_label !== lg) return false;
+    if (rs === '1' && !r.passed) return false;
+    if (rs === '0' && r.passed) return false;
+    return true;
+  });
+}
+
+function fmtDate(s){
+  const d = new Date(s);
+  const p = function(n){ return String(n).padStart(2,'0'); };
+  return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function fmtDur(ms){ const s=Math.round((ms||0)/1000); return Math.floor(s/60)+'分'+String(s%60).padStart(2,'0')+'秒'; }
+const AUTH_JA = { webauthn:'生体認証', photo:'顔写真', skipped:'なし', none:'なし' };
+function authLabel(r){
+  const base = AUTH_JA[r.auth_method] || '—';
+  if (r.auth_method === 'webauthn') return base + (r.reauth_ok ? '／提出時も認証' : '／提出時は未認証');
+  if (r.auth_method === 'photo')    return base + (r.photo_end ? '／提出時も撮影' : '');
+  return base;
+}
+
+function render(){
+  const list = filtered();
+  $('st-n').textContent = list.length;
+  $('st-p').textContent = new Set(list.map(function(r){ return r.candidate_name + '|' + r.birth_date; })).size;
+  $('st-avg').textContent = list.length ? Math.round(list.reduce(function(a,r){ return a + (r.score||0); },0)/list.length) : 0;
+  $('st-rate').textContent = list.length ? Math.round(list.filter(function(r){ return r.passed; }).length/list.length*100)+'%' : '0%';
+
+  $('empty').style.display = list.length ? 'none' : '';
+  $('rows').innerHTML = list.map(function(r){
+    return '<tr>' +
+      '<td>'+fmtDate(r.created_at)+'</td>' +
+      '<td><b>'+esc(r.candidate_name)+'</b></td>' +
+      '<td>'+esc(r.birth_date)+'</td>' +
+      '<td>'+esc(r.lang_label)+'</td>' +
+      '<td><b>'+(r.score||0)+'</b> <span style="color:#5f6f92;font-size:11.5px">('+(r.correct||0)+'/'+(r.total||0)+')</span></td>' +
+      '<td><span class="rk">'+esc(r.rank||'-')+'</span></td>' +
+      '<td><span class="pill '+(r.passed?'p':'f')+'">'+(r.passed?'合格':'不合格')+'</span></td>' +
+      '<td>'+fmtDur(r.duration_ms)+'</td>' +
+      '<td class="auth-ic">'+esc(authLabel(r))+'</td>' +
+      '<td>'+(r.photo_end?'<img class="thumb" src="'+r.photo_end+'" alt="提出時の顔写真">':'—')+'</td>' +
+    '</tr>';
+  }).join('');
+  Array.prototype.forEach.call($('rows').querySelectorAll('.thumb'), function(img){
+    img.onclick = function(){ $('modal-img').src = img.src; $('modal').classList.add('on'); };
+  });
+}
+
+function toCsv(){
+  const head = ['受験日時','氏名','生年月日','言語','得点','正解数','問題数','評価','判定','所要秒','再認証'];
+  const body = filtered().map(function(r){
+    return [fmtDate(r.created_at), r.candidate_name, r.birth_date, r.lang_label, r.score,
+            r.correct, r.total, r.rank, r.passed?'合格':'不合格',
+            Math.round((r.duration_ms||0)/1000), r.reauth_ok?'あり':'なし'];
+  });
+  const csv = [head].concat(body).map(function(row){
+    return row.map(function(v){ return '"' + String(v==null?'':v).replace(/"/g,'""') + '"'; }).join(',');
+  }).join('\r\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'skillcheck_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+$('btn-login').onclick = login;
+$('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') login(); });
+['f-name','f-lang','f-res'].forEach(function(id){ $(id).addEventListener('input', render); });
+$('btn-csv').onclick = toCsv;
+$('btn-reload').onclick = load;
+$('btn-logout').onclick = function(){ sessionStorage.removeItem('sc_admin_token'); token=''; rows=[]; show('s-login'); };
+$('modal').onclick = function(){ $('modal').classList.remove('on'); };
+
+if (!C.SUPABASE_URL){
+  $('login-err').textContent = 'config.js に Supabase の URL と anon key を設定してください。';
+} else if (token){ show('s-list'); load(); }
+})();
+</script>
+</body>
+</html>
