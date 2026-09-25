@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjM2Y3ZWUzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTUyZDU0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNyIgZm9udC13ZWlnaHQ9IjcwMCIgbGV0dGVyLXNwYWNpbmc9IjAuNSIgZmlsbD0iI2Y1OWUwYiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TEc8L3RleHQ+PC9zdmc+">
 <title>SkillCheck — 株式会社LEGAREA</title>
 <style>
 :root{
@@ -32,16 +33,8 @@ input{font:inherit}
 
 /* ===== 共通レイアウト ===== */
 .wrap{max-width:960px;margin:0 auto;padding:22px 18px 52px}
-.brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}
-.brand .mark{
-  width:40px;height:40px;border-radius:11px;flex:none;
-  background:linear-gradient(140deg,#3f7ee3,#152d54);
-  display:grid;place-items:center;color:var(--orange);
-  font-weight:800;font-size:17px;letter-spacing:.02em;
-  box-shadow:0 4px 14px rgba(0,0,0,.35);
-}
-.brand .txt b{display:block;color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em}
-.brand .txt span{display:block;color:var(--blue-300);font-size:11.5px;letter-spacing:.14em}
+.brand{margin-bottom:26px}
+.brand b{color:#fff;font-size:22px;font-weight:800;letter-spacing:.05em}
 
 .card{background:var(--paper);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
 .card .pad{padding:26px 24px}
@@ -78,6 +71,10 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 .bio-head b{font-size:14.5px;display:block}
 .bio-head small{color:var(--muted);font-size:12px;display:block}
 .bio-body{margin-top:14px}
+.bio-body .err + .btn.block{margin-top:4px}
+.bio-body .btn-row + .btn.block{margin-top:10px}
+.bio-body .btn.block + .btn.block{margin-top:10px}
+.bio-gate{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;min-height:1em}
 .bio.done{border-color:var(--ok);background:linear-gradient(180deg,#f2fbf7,#e8f7f0)}
 .bio.done .bio-ic{border-color:var(--ok)}
 
@@ -219,8 +216,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 <div class="wrap">
 
   <div class="brand">
-    <div class="mark">LG</div>
-    <div class="txt"><b>SkillCheck</b><span>LEGAREA / 採用スキル判定</span></div>
+    <b>SkillCheck</b>
   </div>
 
   <!-- ============ 1. TOP ============ -->
@@ -257,6 +253,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
           </div>
         </div>
         <div class="bio-body" id="bio-body"></div>
+        <div class="bio-gate" id="bio-gate"></div>
       </div>
 
       <div class="btn-row">
@@ -335,6 +332,7 @@ const $   = function(id){ return document.getElementById(id); };
 const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
   caps:null, bioMode:'pending', bioDone:false, bioMethod:'none',
+  bioName:'', bioBirth:'',
   credId:null, photoStart:null, camStream:null,
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
@@ -358,6 +356,7 @@ function checkName(){
   state.nameOk = r.ok; state.name = r.value;
   $('err-name').textContent = $('in-name').value ? r.msg : '';
   $('in-name').classList.toggle('bad', !!$('in-name').value && !r.ok);
+  invalidateBioIfChanged();
   syncStart();
 }
 function checkBirth(){
@@ -365,10 +364,47 @@ function checkBirth(){
   state.birthOk = r.ok; state.birth = r.ok ? r.value : '';
   $('err-birth').textContent = $('in-birth').value ? r.msg : '';
   $('in-birth').classList.toggle('bad', !!$('in-birth').value && !r.ok);
+  invalidateBioIfChanged();
   syncStart();
+}
+
+/* 確認済みの氏名・生年月日が書き換えられたら本人確認をやり直す */
+function invalidateBioIfChanged(){
+  if (!state.bioDone || state.bioMethod === 'none' || state.bioMethod === 'skipped') return;
+  if (state.bioName === state.name && state.bioBirth === state.birth) return;
+  const was = state.bioMethod;
+  state.bioDone = false; state.credId = null; state.photoStart = null; state.bioMethod = 'none';
+  $('bio').classList.remove('done');
+  $('bio-ic').innerHTML = BIO_ICON;
+  setupBio();
+  toast(was === 'photo'
+    ? '入力が変更されたため、顔写真を撮り直してください'
+    : '入力が変更されたため、もう一度指紋認証を行ってください');
 }
 function syncStart(){
   $('btn-start').disabled = !SC.canStart(state);
+  gateBio();
+}
+
+/* 本人確認に進める状態か。足りない項目に応じたメッセージを返す */
+function inputsReady(){
+  const n = SC.validateName($('in-name').value);
+  if (!n.ok) return { ok:false, msg: SC.normalizeName($('in-name').value) ? n.msg : '先に氏名を入力してください' };
+  const b = SC.validateBirth($('in-birth').value);
+  if (!b.ok) return { ok:false, msg: $('in-birth').value ? b.msg : '先に生年月日を入力してください' };
+  return { ok:true, msg:'', name:n.value, birth:b.value };
+}
+
+/* 入力が揃うまで本人確認のボタンを押せないようにする */
+function gateBio(){
+  const gate = $('bio-gate');
+  if (state.bioDone){ if (gate) gate.textContent = ''; return; }
+  const r  = inputsReady();
+  const go = $('bio-go'), shot = $('bio-shot');
+  if (go && go.dataset.busy !== '1') go.disabled = !r.ok;
+  if (shot) shot.disabled = !r.ok;
+  if (gate) gate.textContent = r.ok ? '' : '氏名と生年月日を入力すると本人確認に進めます';
+  if (r.ok && $('bio-err')) $('bio-err').textContent = '';
 }
 
 /* ---- 本人確認 UI ---- */
@@ -405,12 +441,30 @@ async function setupBio(){
       : 'Macは電源ボタン、スマートフォンは指紋センサーに触れてください';
     body.innerHTML = '<button class="btn btn-primary block" id="bio-go">'
                    + (needSetup ? 'この端末を登録する' : '指紋認証する') + '</button>'
-                   + '<div class="err" id="bio-err" style="text-align:center"></div>';
+                   + '<div class="err" id="bio-err" style="text-align:center"></div>'
+                   + (state.caps.camera
+                      ? '<button class="btn btn-ghost block" id="bio-alt">指紋認証が使えない場合はカメラで撮影する</button>'
+                      : '');
     $('bio-go').onclick = runWebauthn;
+    if ($('bio-alt')) $('bio-alt').onclick = buildPhotoUI;
     syncStart(); return;
   }
   // photo
   buildPhotoUI();
+}
+
+const BIO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M12 3c-2.2 0-4 1.6-4 3.6v2.1"/><path d="M16 9.2V6.6C16 4.6 14.2 3 12 3"/>'
+  + '<path d="M8 12.5c0 3.4-.6 5.8-1.6 7.5"/><path d="M12 11v3.5c0 2.6-.4 4.6-1.1 6.2"/>'
+  + '<path d="M16 12.2c0 3.6-.5 6.3-1.4 8.3"/><path d="M19.4 15.5c.2-1.1.3-2.2.3-3.3 0-4.1-3.4-7.4-7.7-7.4"/>'
+  + '<path d="M4.3 16.8c.6-1.5.9-3 .9-4.6 0-1.3.4-2.5 1.1-3.5"/></svg>';
+
+function backToBio(){
+  SC.closeCamera(state.camStream); state.camStream = null;
+  state.bioDone = false; state.photoStart = null; state.bioMethod = 'none';
+  $('bio').classList.remove('done');
+  $('bio-ic').innerHTML = BIO_ICON;
+  setupBio(); syncStart();
 }
 
 function buildPhotoUI(){
@@ -419,7 +473,10 @@ function buildPhotoUI(){
   $('bio-body').innerHTML =
     '<video id="cam" playsinline muted></video>' +
     '<div class="btn-row"><button class="btn btn-primary" id="bio-shot">撮影する</button></div>' +
-    '<div class="err" id="bio-err"></div>';
+    '<div class="err" id="bio-err"></div>' +
+    (state.caps.webauthn ? '<button class="btn btn-ghost block" id="bio-back-bio">指紋認証に戻る</button>' : '');
+  if ($('bio-back-bio')) $('bio-back-bio').onclick = backToBio;
+  gateBio();
   SC.openCamera($('cam')).then(function(st){ state.camStream = st; })
     .catch(function(e){
       console.error('[SkillCheck] camera failed', e && e.name, e && e.message);
@@ -432,13 +489,18 @@ function buildPhotoUI(){
       };
     });
   $('bio-shot').onclick = function(){
+    const ready = inputsReady();
+    if (!ready.ok){ $('bio-err').textContent = ready.msg; return; }
     try{
       state.photoStart = SC.snapPhoto($('cam'), 360);
       SC.closeCamera(state.camStream); state.camStream = null;
       state.bioDone = true; state.bioMethod = 'photo';
+      state.bioName = ready.name; state.bioBirth = ready.birth;
       $('bio-body').innerHTML = '<img id="shot" alt="撮影した顔写真" src="'+state.photoStart+'">'
-        + '<div class="btn-row"><button class="btn btn-ghost" id="bio-retake">撮り直す</button></div>';
+        + '<div class="btn-row"><button class="btn btn-ghost" id="bio-retake">撮り直す</button></div>'
+        + (state.caps.webauthn ? '<button class="btn btn-ghost block" id="bio-back-bio">指紋認証に戻る</button>' : '');
       $('bio-retake').onclick = function(){ state.bioDone=false; state.photoStart=null; $('bio').classList.remove('done'); buildPhotoUI(); syncStart(); };
+      if ($('bio-back-bio')) $('bio-back-bio').onclick = backToBio;
       markBioDone('顔写真で本人確認しました');
       syncStart();
     }catch(e){ $('bio-err').textContent = '撮影に失敗しました'; }
@@ -446,18 +508,21 @@ function buildPhotoUI(){
 }
 
 async function runWebauthn(){
-  const nameOk = SC.validateName($('in-name').value);
-  if (!nameOk.ok){ $('bio-err').textContent = '先に氏名を入力してください'; return; }
+  const ready = inputsReady();
+  if (!ready.ok){ $('bio-err').textContent = ready.msg; return; }
   const deviceMode = C.WEBAUTHN_DEVICE_MODE === true;
   const needSetup  = deviceMode && !SC.hasDeviceCred();
-  const btn = $('bio-go'); btn.disabled = true; btn.textContent = '認証中…';
+  const btn = $('bio-go');
+  btn.disabled = true; btn.dataset.busy = '1'; btn.textContent = '認証中…';
   try{
-    const r = await SC.bioVerify({ name: nameOk.value });
+    const r = await SC.bioVerify({ name: ready.name });
     state.credId = r.credId; state.bioDone = true; state.bioMethod = 'webauthn';
+    state.bioName = ready.name; state.bioBirth = ready.birth;
     $('bio-body').innerHTML = '';
     markBioDone(needSetup ? 'この端末を登録し、指紋で本人確認しました' : '指紋で本人確認しました');
   }catch(e){
     console.error('[SkillCheck] webauthn failed', e && e.name, e && e.message);
+    btn.dataset.busy = '0';
     btn.disabled = false;
     btn.textContent = needSetup ? 'この端末を登録する' : '指紋認証する';
     $('bio-err').textContent = SC.jaBioError(e);
@@ -480,6 +545,7 @@ function markBioDone(msg){
   $('bio-title').textContent = '本人確認 完了';
   $('bio-desc').textContent = msg;
   $('bio-ic').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#0e9f6e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
+  $('bio-gate').textContent = '';
 }
 
 /* ================= 言語一覧 ================= */
