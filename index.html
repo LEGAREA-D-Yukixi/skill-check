@@ -233,7 +233,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 
       <div class="field">
         <label for="in-birth">生年月日</label>
-        <input id="in-birth" type="date" max="2099-12-31">
+        <input id="in-birth" type="date" min="1900-01-01" max="2099-12-31">
         <div class="err" id="err-birth"></div>
       </div>
 
@@ -739,6 +739,7 @@ $('btn-back').onclick  = function(){ renderLangs(); show('screen-langs'); };
 window.addEventListener('beforeunload', function(){ SC.closeCamera(state.camStream); });
 
 $('note-count').textContent = (!C.QUESTION_COUNT || C.QUESTION_COUNT<=0) ? '全' : C.QUESTION_COUNT;
+$('in-birth').min = SC.BIRTH_MIN;
 $('in-birth').max = SC.isoDate(new Date());
 document.title = C.APP_TITLE + ' — ' + C.ORG_NAME;
 setupBio();

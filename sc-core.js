@@ -28,6 +28,9 @@
     return { ok: true, value: name, msg: '' };
   }
 
+  // 生年月日として受け付ける最も古い日付（カレンダーの表示下限と揃える）
+  const BIRTH_MIN = '1900-01-01';
+
   // today は 'YYYY-MM-DD'（省略時は実行日）
   function validateBirth(raw, today) {
     const s = String(raw || '').trim();
@@ -39,11 +42,11 @@
     if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) {
       return { ok: false, value: '', msg: '存在しない日付です' };
     }
+    if (s < BIRTH_MIN) return { ok: false, value: s, msg: '1900年以降の日付を入力してください' };
     const now = today ? new Date(today + 'T00:00:00Z') : new Date();
     if (dt.getTime() > now.getTime()) return { ok: false, value: '', msg: '未来の日付は入力できません' };
     const age = ageAt(s, isoDate(now));
     if (age < 15) return { ok: false, value: s, msg: '15歳未満は受験できません' };
-    if (age > 100) return { ok: false, value: s, msg: '生年月日を確認してください' };
     return { ok: true, value: s, msg: '' };
   }
 
@@ -272,6 +275,7 @@
     jaAuthError: jaAuthError,
     validateName: validateName,
     validateBirth: validateBirth,
+    BIRTH_MIN: BIRTH_MIN,
     ageAt: ageAt,
     isoDate: isoDate,
     mulberry32: mulberry32,
