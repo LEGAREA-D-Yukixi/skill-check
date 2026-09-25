@@ -23,11 +23,17 @@ ChallengeBoard / L-1グランプリと同じ構成（バニラJS + Supabase + Gi
 3. 管理者ユーザーを Authentication > Users から追加
 
 ### 2. config.js
+
+Supabase の接続情報は**設定済み**です。そのままアップロードできます。
+
 ```js
-SUPABASE_URL: 'https://xxxxxxxx.supabase.co',
-SUPABASE_ANON_KEY: 'eyJ...',
+SUPABASE_URL: 'https://yklwkovbphqmiucnmcmu.supabase.co',
+SUPABASE_ANON_KEY: 'sb_publishable_...',
 ```
-※ 空のままでも動作します（結果はブラウザのlocalStorageにのみ保存。動作確認用）。
+
+プロジェクトを変更する場合のみ書き換えてください。
+キーは公開前提の publishable key です。anon に SELECT 権限を与えていないため、
+Public リポジトリに置いても応募者データは読み出せません。
 
 ### 3. GitHub Pages
 1. リポジトリ（例 `skill-check`）を作成
@@ -44,14 +50,38 @@ SUPABASE_ANON_KEY: 'eyJ...',
 
 | 値 | 動作 |
 |---|---|
-| `auto`（既定） | Touch ID / Face ID が使える端末ではそれを使い、無ければ顔写真撮影 |
-| `webauthn` | Touch ID / Face ID のみ（**Macは電源ボタン**、iPhoneはFace ID） |
+| `auto`（既定） | 指紋・顔認証が使える端末ではそれを使い、無ければ顔写真撮影 |
+| `webauthn` | 指紋・顔認証のみ（**Macは電源ボタンのTouch ID**、iPhoneはFace ID、Androidは指紋センサー） |
 | `photo` | カメラで顔写真を撮影 |
 | `off` | 本人確認なし |
 
-- `webauthn` は OS標準のWebAuthn（Touch ID / Face ID / Windows Hello）を使用。外部サービス不要・完全無料。
-- 提出時にも再認証（`REAUTH_ON_FINISH`）／再撮影（`PHOTO_ON_FINISH`）を行い、替え玉受験の抑止と証跡に使えます。
-- 生体情報そのものは端末外に出ません。サーバーには認証済みかどうかの記録と、顔写真（photoモード時）のみ保存されます。
+### 登録方式（`WEBAUTHN_DEVICE_MODE`）
+
+| 値 | 動作 |
+|---|---|
+| `false`（既定） | **受験者ごとに指紋を登録する。** 受験者と認証記録が1対1で対応します |
+| `true` | 端末に1つだけ登録し、2人目以降は指紋を当てるだけ。端末にパスキーが溜まりません |
+
+`false`（既定）の注意点：
+
+- Chrome では登録のたびに Google パスワードマネージャーの保存画面が挟まることがあります。**Safari を使うと Touch ID のみで完結します。**
+- 受験者ごとに端末へ資格情報が残ります。定期的に整理してください
+  - Mac: システム設定 → パスワード（「SkillCheck」で検索）
+  - Chrome: 設定 → 自動入力とパスワード → パスキー
+
+### 認証の性質について
+
+WebAuthn は「この端末の登録済みの指紋で解除された」ことを証明する仕組みで、**戸籍上の本人と照合するものではありません**。
+なりすまし対策の証跡としては `BIOMETRIC_MODE: 'photo'`（顔写真）の方が強力です。用途に応じて選んでください。
+
+- 生体情報そのものは端末外に出ません
+- サーバーに残るのは「認証済みかどうか」と、photoモード時の顔写真のみ
+- 提出時にも再認証（`REAUTH_ON_FINISH`）／再撮影（`PHOTO_ON_FINISH`）を行います
+
+### エラー表示
+
+ブラウザやAPIが返す英文はそのまま画面に出さず、すべて日本語のメッセージに変換して表示します。
+原因調査用の詳細（HTTPステータス、DOMException名、APIの応答本文）はブラウザのコンソールに `[SkillCheck]` 付きで出力されます。
 
 ## 運用設定（config.js）
 

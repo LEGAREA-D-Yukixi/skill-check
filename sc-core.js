@@ -205,8 +205,71 @@
     return !!s.bioDone;
   }
 
+  /* ---------------------------------------------------------
+     エラーメッセージの日本語化
+     ブラウザやAPIが返す英文をそのまま画面に出さないための変換
+     --------------------------------------------------------- */
+
+  const BIO_ERRORS = {
+    NotAllowedError:     '認証がキャンセルされたか、時間内に完了しませんでした',
+    InvalidStateError:   'この端末ではすでに登録されています',
+    NotSupportedError:   'この端末は指紋・顔認証に対応していません',
+    SecurityError:       '安全な接続（https）で開かれていないため利用できません',
+    AbortError:          '処理が中断されました',
+    ConstraintError:     '端末の設定により認証を利用できません',
+    UnknownError:        '端末側の問題で認証できませんでした',
+    TypeError:           '認証の設定に問題があります',
+  };
+
+  const CAMERA_ERRORS = {
+    NotAllowedError:     'カメラの使用が許可されていません。ブラウザの設定から許可してください',
+    NotFoundError:       'カメラが見つかりません',
+    NotReadableError:    'カメラを使用できません。他のアプリが使用中の可能性があります',
+    OverconstrainedError:'利用できるカメラがありません',
+    SecurityError:       '安全な接続（https）で開かれていないため利用できません',
+    AbortError:          'カメラの起動が中断されました',
+  };
+
+  function jaBioError(e) {
+    if (!e) return '認証に失敗しました';
+    return BIO_ERRORS[e.name] || '認証に失敗しました';
+  }
+
+  function jaCameraError(e) {
+    if (!e) return 'カメラを利用できません';
+    return CAMERA_ERRORS[e.name] || 'カメラを利用できません';
+  }
+
+  function jaHttpError(status) {
+    if (status === 0)   return 'ネットワークに接続できません';
+    if (status === 401) return '接続キーが正しくありません';
+    if (status === 403) return '保存する権限がありません';
+    if (status === 404) return '保存先が見つかりません';
+    if (status === 409) return 'すでに同じ記録が登録されています';
+    if (status === 413) return 'データが大きすぎます';
+    if (status === 429) return 'アクセスが集中しています。しばらく待ってからお試しください';
+    if (status >= 500)  return 'サーバー側で問題が発生しています';
+    return '保存に失敗しました';
+  }
+
+  function jaAuthError(status, code) {
+    const c = String(code || '');
+    if (status === 0) return 'ネットワークに接続できません';
+    if (/email_not_confirmed/.test(c))   return 'メールアドレスの確認が完了していません';
+    if (/invalid_credentials|invalid_grant/.test(c)) return 'メールアドレスまたはパスワードが正しくありません';
+    if (/user_banned/.test(c))           return 'このアカウントは利用できません';
+    if (status === 400 || status === 401) return 'メールアドレスまたはパスワードが正しくありません';
+    if (status === 429) return 'ログインの試行が多すぎます。しばらく待ってからお試しください';
+    if (status >= 500)  return 'サーバー側で問題が発生しています';
+    return 'ログインできませんでした';
+  }
+
   const api = {
     normalizeName: normalizeName,
+    jaBioError: jaBioError,
+    jaCameraError: jaCameraError,
+    jaHttpError: jaHttpError,
+    jaAuthError: jaAuthError,
     validateName: validateName,
     validateBirth: validateBirth,
     ageAt: ageAt,
@@ -268,44 +331,79 @@
     return caps;
   }
 
-  /* ---- Touch ID / Face ID の登録（Mac は電源ボタン） ---- */
+  /* ---- 指紋・顔認証（WebAuthn） ----
+     既定では受験者ごとに登録し、受験者と認証記録を1対1で対応させる。
+     WEBAUTHN_DEVICE_MODE を true にすると端末に1つだけ登録する運用になる。 */
+  const DEVICE_CRED_KEY = 'sc_device_cred';
+
+  function hasDeviceCred() {
+    try { return !!localStorage.getItem(DEVICE_CRED_KEY); } catch (e) { return false; }
+  }
+  function getDeviceCred() {
+    try { return localStorage.getItem(DEVICE_CRED_KEY); } catch (e) { return null; }
+  }
+  function clearDeviceCred() {
+    try { localStorage.removeItem(DEVICE_CRED_KEY); } catch (e) {}
+  }
+
+  /* ---- 指紋の登録 ---- */
   async function bioRegister(profile) {
+    const p = profile || {};
+    const label = p.device ? 'SkillCheck 受験端末' : (p.name || '受験者');
     const userId = randomBytes(16);
     const cred = await navigator.credentials.create({
       publicKey: {
         challenge: randomBytes(32),
         rp: { name: (cfg().ORG_NAME || 'SkillCheck') + ' SkillCheck', id: location.hostname },
-        user: {
-          id: userId,
-          name: (profile.name || 'candidate') + '@skillcheck',
-          displayName: profile.name || '受験者',
-        },
+        user: { id: userId, name: label, displayName: label },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
         authenticatorSelection: {
-          authenticatorAttachment: 'platform',
-          userVerification: 'required',
-          residentKey: 'discouraged',
+          authenticatorAttachment: 'platform',  // 端末内の認証器のみ（QRの別端末連携を出さない）
+          userVerification: 'required',         // 指紋・顔の照合を必須にする
+          requireResidentKey: false,
+          residentKey: 'discouraged',           // 同期パスキーにしない
         },
+        hints: ['client-device'],               // この端末で認証する意図を明示
         timeout: 60000,
         attestation: 'none',
       },
     });
-    if (!cred) throw new Error('認証がキャンセルされました');
+    if (!cred) throw new Error('登録がキャンセルされました');
     return { method: 'webauthn', credId: bufToB64url(cred.rawId), at: new Date().toISOString() };
   }
 
-  /* ---- 提出時の再認証 ---- */
+  /* ---- 指紋の照合 ---- */
   async function bioAssert(credId) {
     const assertion = await navigator.credentials.get({
       publicKey: {
         challenge: randomBytes(32),
-        allowCredentials: credId ? [{ type: 'public-key', id: b64urlToBuf(credId) }] : [],
+        allowCredentials: credId
+          ? [{ type: 'public-key', id: b64urlToBuf(credId), transports: ['internal'] }]
+          : [],
         userVerification: 'required',
+        hints: ['client-device'],
         timeout: 60000,
       },
     });
     if (!assertion) throw new Error('認証がキャンセルされました');
     return { ok: true, at: new Date().toISOString() };
+  }
+
+  /* ---- 受験開始時の本人確認 ---- */
+  async function bioVerify(profile) {
+    if (cfg().WEBAUTHN_DEVICE_MODE === true) {
+      const saved = getDeviceCred();
+      if (saved) {
+        await bioAssert(saved);
+        return { method: 'webauthn', credId: saved, at: new Date().toISOString(), firstTime: false };
+      }
+      const d = await bioRegister({ device: true });
+      try { localStorage.setItem(DEVICE_CRED_KEY, d.credId); } catch (e) {}
+      return { method: 'webauthn', credId: d.credId, at: d.at, firstTime: true };
+    }
+    // 既定：受験者ごとに登録する
+    const r = await bioRegister({ name: (profile || {}).name });
+    return { method: 'webauthn', credId: r.credId, at: r.at, firstTime: true };
   }
 
   /* ---- カメラ ---- */
@@ -340,20 +438,46 @@
     return !!(c.SUPABASE_URL && c.SUPABASE_ANON_KEY);
   }
 
-  async function sbInsert(table, row, returnRow) {
+  // anon には SELECT 権限を与えていないため、INSERT結果の行を返させる指定は使えない。
+  // id をこちら側で採番して INSERT のみで完結させる。
+  function newId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    const b = randomBytes(16);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let h = '';
+    for (let i = 0; i < b.length; i++) h += b[i].toString(16).padStart(2, '0');
+    return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+  }
+
+  async function sbInsert(table, row) {
     const c = cfg();
-    const res = await fetch(c.SUPABASE_URL + '/rest/v1/' + table, {
-      method: 'POST',
-      headers: {
-        'apikey': c.SUPABASE_ANON_KEY,
-        'Authorization': 'Bearer ' + c.SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': returnRow ? 'return=representation' : 'return=minimal',
-      },
-      body: JSON.stringify(row),
-    });
-    if (!res.ok) throw new Error('保存に失敗しました (' + res.status + ') ' + (await res.text()));
-    return returnRow ? (await res.json())[0] : null;
+    const base = String(c.SUPABASE_URL).replace(/\/+$/, '');
+    let res;
+    try {
+      res = await fetch(base + '/rest/v1/' + table, {
+        method: 'POST',
+        headers: {
+          'apikey': c.SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + c.SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(row),
+      });
+    } catch (e) {
+      const err = new Error('ネットワークに接続できません');
+      err.status = 0;
+      throw err;
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(function () { return ''; });
+      const err = new Error(jaHttpError(res.status));
+      err.status = res.status;
+      err.body = body;       // 英文の詳細はコンソール確認用。画面には出さない
+      throw err;
+    }
+    return row;
   }
 
   function localPush(key, row) {
@@ -364,25 +488,30 @@
   }
 
   async function saveSession(row) {
-    if (sbReady()) return await sbInsert('sc_sessions', row, true);
-    const local = Object.assign({ id: 'local-' + Date.now(), created_at: new Date().toISOString() }, row);
-    return localPush('sc_sessions', local);
+    const full = Object.assign({ id: newId() }, row);
+    if (sbReady()) { await sbInsert('sc_sessions', full); return full; }
+    return localPush('sc_sessions', Object.assign({ created_at: new Date().toISOString() }, full));
   }
 
   async function saveResult(row) {
-    if (sbReady()) return await sbInsert('sc_results', row, true);
-    const local = Object.assign({ id: 'local-' + Date.now(), created_at: new Date().toISOString() }, row);
-    return localPush('sc_results', local);
+    const full = Object.assign({ id: newId() }, row);
+    if (sbReady()) { await sbInsert('sc_results', full); return full; }
+    return localPush('sc_results', Object.assign({ created_at: new Date().toISOString() }, full));
   }
 
   Object.assign(api, {
     detectCaps: detectCaps,
     bioRegister: bioRegister,
     bioAssert: bioAssert,
+    bioVerify: bioVerify,
+    hasDeviceCred: hasDeviceCred,
+    getDeviceCred: getDeviceCred,
+    clearDeviceCred: clearDeviceCred,
     openCamera: openCamera,
     closeCamera: closeCamera,
     snapPhoto: snapPhoto,
     sbReady: sbReady,
+    newId: newId,
     saveSession: saveSession,
     saveResult: saveResult,
     bufToB64url: bufToB64url,

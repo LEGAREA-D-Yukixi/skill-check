@@ -34,6 +34,14 @@ p.lead{color:var(--muted);font-size:13px;margin-top:5px}
 .field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
 .field input,.field select{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fbfcfe;font-size:15px}
 .field input:focus,.field select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12)}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:52px}
+.pw-eye{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:36px;height:36px;
+  display:grid;place-items:center;border:none;background:transparent;border-radius:9px;cursor:pointer}
+.pw-eye:hover{background:var(--blue-100)}
+.pw-eye:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.pw-eye svg{width:20px;height:20px;stroke:var(--muted);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.pw-eye.on svg{stroke:var(--blue)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border:1.5px solid transparent;
   border-radius:11px;font-weight:700;font-size:14px;cursor:pointer}
 .btn-primary{background:linear-gradient(135deg,#2563eb,#1538a0);color:#fff}
@@ -79,7 +87,14 @@ tbody tr:hover{background:#f7faff}
       <h2>管理者ログイン</h2>
       <p class="lead">Supabase に登録された管理者アカウントでログインしてください。</p>
       <div class="field"><label for="em">メールアドレス</label><input id="em" type="email" autocomplete="username"></div>
-      <div class="field"><label for="pw">パスワード</label><input id="pw" type="password" autocomplete="current-password"></div>
+      <div class="field"><label for="pw">パスワード</label>
+        <div class="pw-wrap">
+          <input id="pw" type="password" autocomplete="current-password">
+          <button type="button" class="pw-eye" id="pw-eye" aria-label="パスワードを表示" aria-pressed="false">
+            <svg id="pw-icon" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
       <div class="err" id="login-err"></div>
       <div style="margin-top:16px"><button class="btn btn-primary block" id="btn-login">ログイン</button></div>
     </div></div>
@@ -132,29 +147,66 @@ let rows = [];
 function show(id){ ['s-login','s-list'].forEach(function(s){ $(s).classList.toggle('on', s===id); }); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
+function jaAuthError(status, code){
+  const c = String(code || '');
+  if (status === 0) return 'ネットワークに接続できません';
+  if (/email_not_confirmed/.test(c))                return 'メールアドレスの確認が完了していません';
+  if (/invalid_credentials|invalid_grant/.test(c))  return 'メールアドレスまたはパスワードが正しくありません';
+  if (/user_banned/.test(c))                        return 'このアカウントは利用できません';
+  if (status === 400 || status === 401)             return 'メールアドレスまたはパスワードが正しくありません';
+  if (status === 429) return 'ログインの試行が多すぎます。しばらく待ってからお試しください';
+  if (status >= 500)  return 'サーバー側で問題が発生しています';
+  return 'ログインできませんでした';
+}
+
 async function login(){
   const b = $('btn-login'); b.disabled = true; b.textContent = 'ログイン中…';
   $('login-err').textContent = '';
+  if (!$('em').value.trim() || !$('pw').value){
+    $('login-err').textContent = 'メールアドレスとパスワードを入力してください';
+    b.disabled = false; b.textContent = 'ログイン'; return;
+  }
   try{
-    const res = await fetch(C.SUPABASE_URL + '/auth/v1/token?grant_type=password', {
-      method:'POST',
-      headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({ email: $('em').value.trim(), password: $('pw').value }),
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error_description || j.msg || 'ログインに失敗しました');
+    let res;
+    try{
+      res = await fetch(C.SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+        method:'POST',
+        headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+        body: JSON.stringify({ email: $('em').value.trim(), password: $('pw').value }),
+      });
+    }catch(netErr){
+      throw { status: 0, code: '' };
+    }
+    const j = await res.json().catch(function(){ return {}; });
+    if (!res.ok) throw { status: res.status, code: j.error_code || j.error || j.code || '' };
     token = j.access_token;
     sessionStorage.setItem('sc_admin_token', token);
     show('s-list'); await load();
-  }catch(e){ $('login-err').textContent = e.message || String(e); }
+  }catch(e){
+    console.error('[SkillCheck] login failed', e);
+    $('login-err').textContent = jaAuthError(e && e.status, e && e.code);
+  }
   b.disabled = false; b.textContent = 'ログイン';
 }
 
 async function load(){
-  const url = C.SUPABASE_URL + '/rest/v1/sc_results?select=*&order=created_at.desc&limit=1000';
-  const res = await fetch(url, { headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Authorization':'Bearer ' + token } });
-  if (res.status === 401 || res.status === 403){ sessionStorage.removeItem('sc_admin_token'); token=''; show('s-login'); return; }
-  rows = await res.json();
+  const base = String(C.SUPABASE_URL).replace(/\/+$/, '');
+  const url = base + '/rest/v1/sc_results?select=*&order=created_at.desc&limit=1000';
+  let res;
+  try{
+    res = await fetch(url, { headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Authorization':'Bearer ' + token } });
+  }catch(e){
+    $('empty').style.display = ''; $('empty').textContent = 'ネットワークに接続できません';
+    return;
+  }
+  if (res.status === 401 || res.status === 403){ sessionStorage.removeItem('sc_admin_token'); token=''; show('s-login');
+    $('login-err').textContent = 'ログインの有効期限が切れました。もう一度ログインしてください'; return; }
+  if (!res.ok){
+    console.error('[SkillCheck] load failed', res.status, await res.text().catch(function(){ return ''; }));
+    $('empty').style.display = ''; $('empty').textContent = '受験結果を読み込めませんでした';
+    return;
+  }
+  rows = await res.json().catch(function(){ return []; });
   if (!Array.isArray(rows)) rows = [];
   const langs = Array.from(new Set(rows.map(function(r){ return r.lang_label; }))).sort();
   $('f-lang').innerHTML = '<option value="">すべて</option>' + langs.map(function(l){ return '<option>'+esc(l)+'</option>'; }).join('');
@@ -180,7 +232,7 @@ function fmtDate(s){
   return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
 }
 function fmtDur(ms){ const s=Math.round((ms||0)/1000); return Math.floor(s/60)+'分'+String(s%60).padStart(2,'0')+'秒'; }
-const AUTH_JA = { webauthn:'生体認証', photo:'顔写真', skipped:'なし', none:'なし' };
+const AUTH_JA = { webauthn:'指紋認証', photo:'顔写真', skipped:'なし', none:'なし' };
 function authLabel(r){
   const base = AUTH_JA[r.auth_method] || '—';
   if (r.auth_method === 'webauthn') return base + (r.reauth_ok ? '／提出時も認証' : '／提出時は未認証');
@@ -196,6 +248,7 @@ function render(){
   $('st-rate').textContent = list.length ? Math.round(list.filter(function(r){ return r.passed; }).length/list.length*100)+'%' : '0%';
 
   $('empty').style.display = list.length ? 'none' : '';
+  $('empty').textContent = '該当する受験記録はありません。';
   $('rows').innerHTML = list.map(function(r){
     return '<tr>' +
       '<td>'+fmtDate(r.created_at)+'</td>' +
@@ -233,6 +286,17 @@ function toCsv(){
 }
 
 $('btn-login').onclick = login;
+$('pw-eye').onclick = function(){
+  const showing = $('pw').type === 'text';
+  $('pw').type = showing ? 'password' : 'text';
+  this.classList.toggle('on', !showing);
+  this.setAttribute('aria-pressed', String(!showing));
+  this.setAttribute('aria-label', showing ? 'パスワードを表示' : 'パスワードを隠す');
+  $('pw-icon').innerHTML = showing
+    ? '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
+    : '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3.5 3.5l17 17"/>';
+  $('pw').focus();
+};
 $('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') login(); });
 ['f-name','f-lang','f-res'].forEach(function(id){ $(id).addEventListener('input', render); });
 $('btn-csv').onclick = toCsv;

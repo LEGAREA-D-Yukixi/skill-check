@@ -151,7 +151,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 .exam-head .lng{font-weight:800;font-size:16px;letter-spacing:.01em}
 .exam-head .cnt{font-size:12.5px;color:var(--blue-300)}
 .bar{height:5px;background:#e8edf7}
-.bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--orange));transition:width .25s}
+.bar > i{display:block;height:100%;background:var(--blue);transition:width .25s}
 .qno{font-size:11.5px;font-weight:800;letter-spacing:.1em;color:var(--blue)}
 .qtext{font-size:17.5px;font-weight:700;margin-top:8px;line-height:1.55}
 .choices{margin-top:18px;display:flex;flex-direction:column;gap:10px}
@@ -176,6 +176,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 }
 .dot.answered{background:var(--blue-100);border-color:var(--blue-300);color:var(--blue)}
 .dot.cur{border-color:var(--orange);box-shadow:0 0 0 3px rgba(245,158,11,.22)}
+.hint{color:var(--muted);font-size:12.5px;margin-top:12px;min-height:1em}
 
 /* ===== 結果 ===== */
 .score-hero{
@@ -288,6 +289,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
         <div class="qtext" id="ex-q">—</div>
         <div class="choices" id="ex-choices"></div>
         <div class="dots" id="ex-dots"></div>
+        <div class="hint" id="ex-left"></div>
         <div class="btn-row">
           <button class="btn btn-ghost" id="btn-prev">前の問題</button>
           <button class="btn btn-primary" id="btn-next">次の問題</button>
@@ -395,9 +397,14 @@ async function setupBio(){
     syncStart(); return;
   }
   if (state.bioMode === 'webauthn'){
-    $('bio-title').textContent = 'Touch ID / Face ID で本人確認';
-    $('bio-desc').textContent  = 'Macは電源ボタン、iPhoneはFace IDで認証します';
-    body.innerHTML = '<button class="btn btn-primary block" id="bio-go">生体認証を開始する</button>'
+    const deviceMode = C.WEBAUTHN_DEVICE_MODE === true;
+    const needSetup  = deviceMode && !SC.hasDeviceCred();
+    $('bio-title').textContent = needSetup ? '指紋認証の初回設定' : '指紋認証で本人確認';
+    $('bio-desc').textContent  = needSetup
+      ? 'この端末では初めての利用です。1回だけ端末の登録が必要です'
+      : 'Macは電源ボタン、スマートフォンは指紋センサーに触れてください';
+    body.innerHTML = '<button class="btn btn-primary block" id="bio-go">'
+                   + (needSetup ? 'この端末を登録する' : '指紋認証する') + '</button>'
                    + '<div class="err" id="bio-err" style="text-align:center"></div>';
     $('bio-go').onclick = runWebauthn;
     syncStart(); return;
@@ -415,7 +422,8 @@ function buildPhotoUI(){
     '<div class="err" id="bio-err"></div>';
   SC.openCamera($('cam')).then(function(st){ state.camStream = st; })
     .catch(function(e){
-      $('bio-err').textContent = 'カメラを利用できません：' + (e.message||e);
+      console.error('[SkillCheck] camera failed', e && e.name, e && e.message);
+      $('bio-err').textContent = SC.jaCameraError(e);
       $('bio-body').insertAdjacentHTML('beforeend',
         '<button class="btn btn-ghost block" id="bio-skip" style="margin-top:10px">確認なしで続ける</button>');
       $('bio-skip').onclick = function(){
@@ -440,16 +448,25 @@ function buildPhotoUI(){
 async function runWebauthn(){
   const nameOk = SC.validateName($('in-name').value);
   if (!nameOk.ok){ $('bio-err').textContent = '先に氏名を入力してください'; return; }
+  const deviceMode = C.WEBAUTHN_DEVICE_MODE === true;
+  const needSetup  = deviceMode && !SC.hasDeviceCred();
   const btn = $('bio-go'); btn.disabled = true; btn.textContent = '認証中…';
   try{
-    const r = await SC.bioRegister({ name: nameOk.value });
+    const r = await SC.bioVerify({ name: nameOk.value });
     state.credId = r.credId; state.bioDone = true; state.bioMethod = 'webauthn';
     $('bio-body').innerHTML = '';
-    markBioDone('Touch ID / Face ID で本人確認しました');
+    markBioDone(needSetup ? 'この端末を登録し、指紋で本人確認しました' : '指紋で本人確認しました');
   }catch(e){
-    btn.disabled = false; btn.textContent = '生体認証を開始する';
-    $('bio-err').textContent = '認証できませんでした：' + (e.message || e);
-    if (state.caps.camera){
+    console.error('[SkillCheck] webauthn failed', e && e.name, e && e.message);
+    btn.disabled = false;
+    btn.textContent = needSetup ? 'この端末を登録する' : '指紋認証する';
+    $('bio-err').textContent = SC.jaBioError(e);
+    if (deviceMode && SC.hasDeviceCred() && !$('bio-reset')){
+      $('bio-body').insertAdjacentHTML('beforeend',
+        '<button class="btn btn-ghost block" id="bio-reset" style="margin-top:10px">この端末を登録し直す</button>');
+      $('bio-reset').onclick = function(){ SC.clearDeviceCred(); setupBio(); };
+    }
+    if (state.caps.camera && !$('bio-alt')){
       $('bio-body').insertAdjacentHTML('beforeend',
         '<button class="btn btn-ghost block" id="bio-alt" style="margin-top:10px">カメラでの本人確認に切り替える</button>');
       $('bio-alt').onclick = buildPhotoUI;
@@ -468,7 +485,7 @@ function markBioDone(msg){
 /* ================= 言語一覧 ================= */
 function renderLangs(){
   $('pb-name').textContent = state.name;
-  $('pb-bio').textContent  = state.bioMethod === 'webauthn' ? '本人確認 済（生体認証）'
+  $('pb-bio').textContent  = state.bioMethod === 'webauthn' ? '本人確認 済（指紋認証）'
                            : state.bioMethod === 'photo'    ? '本人確認 済（顔写真）'
                            : '本人確認 なし';
   const groups = [];
@@ -511,7 +528,10 @@ async function ensureSession(){
     });
     state.sessionId = row && row.id ? row.id : null;
     state.sessionSaved = true;
-  }catch(e){ toast('受験者情報の保存に失敗しました。続行はできます。'); }
+  }catch(e){
+    console.error('[SkillCheck] sc_sessions insert failed', e.status, e.message);
+    toast('受験者情報を保存できませんでした。' + SC.jaHttpError(e.status));
+  }
 }
 
 function startExam(key){
@@ -561,6 +581,12 @@ function renderQ(){
   const last = state.cur === n-1;
   $('btn-next').style.display   = last ? 'none' : '';
   $('btn-submit').style.display = last ? '' : 'none';
+  const left = SC.unanswered(state.exam, state.answers).length;
+  $('btn-submit').disabled = left > 0;
+  $('btn-submit').textContent = left > 0 ? '未回答が' + left + '問あります' : '解答を提出する';
+  $('ex-left').textContent = (last && left > 0)
+    ? '下の番号から未回答の問題に移動できます。'
+    : '';
 }
 
 async function submitExam(){
@@ -604,7 +630,8 @@ async function submitExam(){
     });
     $('rs-saved').textContent = SC.sbReady() ? '結果を送信しました。' : '結果はこの端末に保存されました（Supabase未設定）。';
   }catch(e){
-    $('rs-saved').textContent = '結果の送信に失敗しました。担当者にお知らせください。';
+    console.error('[SkillCheck] sc_results insert failed', e.status, e.message, e.body);
+    $('rs-saved').textContent = '結果を送信できませんでした。' + SC.jaHttpError(e.status) + '。担当者にお知らせください。';
   }
   btn.disabled = false; btn.textContent = '解答を提出する';
   state.finished[state.lang.key] = g.score;

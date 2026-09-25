@@ -5,8 +5,8 @@
 
 window.SC_CONFIG = {
   /* ---- Supabase 接続 ----
-     未設定（空文字）のままでも動作します。
-     その場合は結果がブラウザのlocalStorageにのみ保存されます（動作確認用）。 */
+     設定済み。プロジェクトを変える場合のみ書き換えてください。
+     空文字にすると結果はブラウザのlocalStorageにのみ保存されます（動作確認用）。 */
   SUPABASE_URL: 'https://yklwkovbphqmiucnmcmu.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_V34btW_6HTEdovDYrtiDUw_FDDb93KW',
 
@@ -23,8 +23,12 @@ window.SC_CONFIG = {
      'photo'    : カメラでの顔写真撮影のみ
      'off'      : 本人確認なし */
   BIOMETRIC_MODE: 'auto',
+  /* false（既定）: 受験者ごとに指紋を登録する。受験者と認証記録が1対1で対応する。
+     true         : 端末に1つだけ登録し、2人目以降は指紋を当てるだけにする。
+                    端末にパスキーが溜まらないが、受験者個別の記録にはならない。 */
+  WEBAUTHN_DEVICE_MODE: false,
   PHOTO_ON_FINISH: true,   // 提出時にも顔写真を撮る（替え玉対策）
-  REAUTH_ON_FINISH: true,  // 提出時に生体認証を再要求
+  REAUTH_ON_FINISH: true,  // 提出時に指紋認証を再要求
 
   /* ---- 表示 ---- */
   ORG_NAME: '株式会社LEGAREA',
