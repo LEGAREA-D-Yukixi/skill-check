@@ -773,7 +773,9 @@
           const dx2 = (w - vw * s2) / 2, dy2 = (h - vh * s2) / 2;
           const pad2 = (o.maskPad == null ? 22 : o.maskPad) * Math.min(cal.kx, cal.ky) * s2;
           holes2.push({ x: dx2 + v.x * s2 - pad2, y: dy2 + v.y * s2 - pad2,
-                        w: v.w * s2 + pad2 * 2, h: v.h * s2 + pad2 * 2 });
+                        w: v.w * s2 + pad2 * 2, h: v.h * s2 + pad2 * 2,
+                        // 描き直し用。余白を含まない実際の矩形
+                        rect: { x: dx2 + v.x * s2, y: dy2 + v.y * s2, w: v.w * s2, h: v.h * s2 } });
         }
         const s2 = Math.min(w / vw, h / vh);
         const dw2 = vw * s2, dh2 = vh * s2;
@@ -794,7 +796,7 @@
               ctx.beginPath();
               ctx.rect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
               ctx.clip();
-              try { paintMask(ctx, holes2[i], Math.min(cal.kx, cal.ky) * s2); } catch (e) {}
+              try { paintMask(ctx, holes2[i].rect || holes2[i], Math.min(cal.kx, cal.ky) * s2); } catch (e) {}
               ctx.restore();
             }
           }
@@ -848,6 +850,8 @@
           y: dy + (v.y - sy) * s - pad,
           w: v.w * s + pad * 2,
           h: v.h * s + pad * 2,
+          // 描き直し用。余白を含まない実際の矩形
+          rect: { x: dx + (v.x - sx) * s, y: dy + (v.y - sy) * s, w: v.w * s, h: v.h * s },
         });
       }
 
@@ -873,7 +877,7 @@
             ctx.beginPath();
             ctx.rect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
             ctx.clip();
-            try { paintMask(ctx, holes[i], Math.min(kx, ky) * s); } catch (e) {}
+            try { paintMask(ctx, holes[i].rect || holes[i], Math.min(kx, ky) * s); } catch (e) {}
             ctx.restore();
           }
         }
