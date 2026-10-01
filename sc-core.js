@@ -622,33 +622,83 @@
     cv.width = w; cv.height = h;
     const ctx = cv.getContext('2d');
     const sv = screenVideo || null;
-    const clipEl = o.clipEl || null;   // 指定するとこの要素の範囲だけを描く
+    const areaEl  = o.areaEl || null;   // 録画してよい範囲
+    const cropped = !!o.cropped;        // ブラウザ側で既に絞り込み済みか
+    const maskEl  = o.maskEl || null;   // 録画から除外する要素を返す関数
     const cvid = camStream ? videoFrom(camStream) : null;
     let timer = null;
 
     /* 画面の描画。
-       clipEl が指定されている場合は、その要素の矩形だけを切り出して描く。
-       ブラウザ側で撮影範囲を絞れないときの代替で、範囲外（模範解答など）は
-       canvas に一度も描かれないため録画にも残らない。 */
+       areaEl   : 録画してよい範囲（受験カード）
+       cropped  : ブラウザ側で既に areaEl に絞り込み済みかどうか
+       maskEl() : 録画から除外する要素（模範解答）。重ねて表示していても映らない
+
+       除外はクリップで行うため、該当のピクセルは canvas に一度も描かれない。
+       範囲や除外位置を特定できない場合は何も描かず、安全側に倒す。 */
     function drawScreen(video) {
       const vw = video.videoWidth, vh = video.videoHeight;
-      if (!vw || !vh) return;
-      let sx = 0, sy = 0, sw = vw, sh = vh;
-      if (clipEl) {
+      if (!vw || !vh || !areaEl) return;
+      const er = areaEl.getBoundingClientRect();
+      if (!er.width || !er.height) return;
+
+      // 映像が写している範囲。絞り込み済みならカード、そうでなければ表示領域全体
+      let base;
+      if (cropped) base = er;
+      else {
         const iw = window.innerWidth || 0, ih = window.innerHeight || 0;
-        if (!iw || !ih) return;                 // 対応が取れないときは描かない
-        const r = clipEl.getBoundingClientRect();
-        if (!r.width || !r.height) return;
-        const kx = vw / iw, ky = vh / ih;
-        sx = Math.max(0, Math.floor(r.left * kx));
-        sy = Math.max(0, Math.floor(r.top * ky));
-        sw = Math.min(vw - sx, Math.ceil(r.width * kx));
-        sh = Math.min(vh - sy, Math.ceil(r.height * ky));
-        if (sw <= 0 || sh <= 0) return;         // 取り切れないときも描かない
+        if (!iw || !ih) return;
+        base = { left: 0, top: 0, width: iw, height: ih };
       }
+      const kx = vw / base.width, ky = vh / base.height;
+      const toVideo = function (r) {
+        return { x: (r.left - base.left) * kx, y: (r.top - base.top) * ky,
+                 w: r.width * kx, h: r.height * ky };
+      };
+
+      const src = toVideo(er);
+      const sx = Math.max(0, Math.floor(src.x));
+      const sy = Math.max(0, Math.floor(src.y));
+      const sw = Math.min(vw - sx, Math.ceil(src.w));
+      const sh = Math.min(vh - sy, Math.ceil(src.h));
+      if (sw <= 0 || sh <= 0) return;
+
       const s = Math.min(w / sw, h / sh);
       const dw = sw * s, dh = sh * s;
-      ctx.drawImage(video, sx, sy, sw, sh, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      const dx = (w - dw) / 2, dy = (h - dh) / 2;
+
+      // 除外する矩形をキャンバス座標に直す（影の分だけ余白を足す）
+      const holes = [];
+      const me = maskEl ? maskEl() : null;
+      if (me) {
+        const mr = me.getBoundingClientRect();
+        if (!mr.width || !mr.height) return;   // 位置を特定できない＝描かない
+        const v = toVideo(mr);
+        const pad = 22 * Math.min(kx, ky) * s;   // 影や丸みの分の余白
+        holes.push({
+          x: dx + (v.x - sx) * s - pad,
+          y: dy + (v.y - sy) * s - pad,
+          w: v.w * s + pad * 2,
+          h: v.h * s + pad * 2,
+        });
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(dx, dy, dw, dh);
+      for (let i = 0; i < holes.length; i++) {
+        ctx.rect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
+      }
+      ctx.clip('evenodd');                      // 穴の部分には描かれない
+      ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
+      ctx.restore();
+
+      // 穴はカードの地色で埋める
+      if (holes.length) {
+        ctx.fillStyle = o.maskFill || '#ffffff';
+        for (let i = 0; i < holes.length; i++) {
+          ctx.fillRect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
+        }
+      }
     }
     function draw() {
       ctx.fillStyle = '#0b1730';
