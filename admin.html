@@ -518,9 +518,16 @@ function recReason(){
   // 送信の失敗が最も原因が特定しやすいので先に見る
   const up = find('upload_fail');
   if (up){
-    const code = String(up.status);
-    return '録画はできましたが送信に失敗しました（コード ' + code + '）。'
-         + (UPLOAD_JA[code] || 'Storageの設定を確認してください')
+    // Supabase は HTTP 400 で返しつつ、本文に本当のコードを入れてくることがある
+    let code = String(up.status);
+    const m = /"statusCode"\s*:\s*"?(\d{3})"?/.exec(up.detail || '');
+    if (m) code = m[1];
+    const rls = /row-level security|AccessDenied|Unauthorized/i.test(up.detail || '');
+    const why = rls
+      ? 'storage.objects のポリシーが INSERT を拒否しています。ロール指定を外した以下で作り直してください。'
+        + ' create policy sc_rec_ins on storage.objects for insert with check (bucket_id = \'sc-recordings\');'
+      : (UPLOAD_JA[code] || 'Storageの設定を確認してください');
+    return '録画はできましたが送信に失敗しました（コード ' + code + '）。' + why
          + (up.detail ? '　詳細: ' + up.detail : '');
   }
 

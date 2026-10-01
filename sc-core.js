@@ -723,7 +723,9 @@
           'apikey': c.SUPABASE_ANON_KEY,
           'Authorization': 'Bearer ' + c.SUPABASE_ANON_KEY,
           'Content-Type': String(blob.type || 'application/octet-stream').split(';')[0],
-          'x-upsert': 'true',
+          // x-upsert は付けない。上書き扱いになると INSERT に加えて UPDATE 権限が要るため。
+          // ファイル名は毎回UUIDなので衝突しない。
+          'Cache-Control': '3600',
         },
         body: blob,
       });
