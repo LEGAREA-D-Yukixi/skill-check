@@ -1,7 +1,4 @@
-# SkillCheck — 採用スキルチェックシステム
-
-株式会社LEGAREA 採用選考用の言語スキル判定ツール。
-ChallengeBoard / L-1グランプリと同じ構成（バニラJS + Supabase + GitHub Pages）で、**追加コストゼロ**で運用できます。
+# SkillCheck — スキルチェックシステム
 
 ## ファイル構成
 
