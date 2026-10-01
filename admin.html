@@ -242,27 +242,37 @@ async function login(){
     $('login-err').textContent = 'メールアドレスとパスワードを入力してください';
     b.disabled = false; b.textContent = 'ログイン'; return;
   }
+  let ok = false;
   try{
     let res;
     try{
-      res = await fetch(C.SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+      res = await fetch(BASE() + '/auth/v1/token?grant_type=password', {
         method:'POST',
-        headers:{ 'apikey': C.SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+        headers:{
+          'apikey': C.SUPABASE_ANON_KEY,
+          // 新形式のキーでは Authorization も無いとゲートウェイで弾かれ、
+          // CORS応答が返らず「ネットワークエラー」として見える
+          'Authorization': 'Bearer ' + C.SUPABASE_ANON_KEY,
+          'Content-Type':'application/json',
+        },
         body: JSON.stringify({ email: $('em').value.trim(), password: $('pw').value }),
       });
     }catch(netErr){
+      console.error('[SkillCheck] login fetch failed', netErr && netErr.message, BASE());
       throw { status: 0, code: '' };
     }
     const j = await res.json().catch(function(){ return {}; });
     if (!res.ok) throw { status: res.status, code: j.error_code || j.error || j.code || '' };
     token = j.access_token;
     sessionStorage.setItem('sc_admin_token', token);
-    show('s-list'); await load();
+    ok = true;
   }catch(e){
     console.error('[SkillCheck] login failed', e);
     $('login-err').textContent = jaAuthError(e && e.status, e && e.code);
   }
   b.disabled = false; b.textContent = 'ログイン';
+  // 一覧の読み込みで失敗してもログインエラーにしない
+  if (ok){ show('s-list'); await load(); }
 }
 
 async function load(){
@@ -501,6 +511,7 @@ function renderTotal(){
 /* 録画が残っていない理由をログから拾う */
 const UPLOAD_JA = {
   '-1':  'ネットワークに接続できません',
+  '0':   'Supabaseに接続できません。config.js のURLとキー、通信環境を確認してください',
   '400': 'リクエストが拒否されました。バケット名を確認してください',
   '401': '接続キーが正しくありません',
   '403': 'アップロードの権限がありません。storage.objects の anon INSERT ポリシーを確認してください',
