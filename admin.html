@@ -233,11 +233,10 @@ function fmtDate(s){
   return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
 }
 function fmtDur(ms){ const s=Math.round((ms||0)/1000); return Math.floor(s/60)+'分'+String(s%60).padStart(2,'0')+'秒'; }
-const AUTH_JA = { webauthn:'指紋認証', photo:'顔写真', skipped:'なし', none:'なし' };
+const AUTH_JA = { photo:'顔写真', skipped:'なし', none:'なし' };
 function authLabel(r){
   const base = AUTH_JA[r.auth_method] || '—';
-  if (r.auth_method === 'webauthn') return base + (r.reauth_ok ? '／提出時も認証' : '／提出時は未認証');
-  if (r.auth_method === 'photo')    return base + (r.photo_end ? '／提出時も撮影' : '');
+  if (r.auth_method === 'photo') return base + (r.photo_end ? '／提出時も撮影' : '／開始時のみ');
   return base;
 }
 

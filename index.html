@@ -333,7 +333,7 @@ const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
   caps:null, bioMode:'pending', bioDone:false, bioMethod:'none',
   bioName:'', bioBirth:'',
-  credId:null, photoStart:null, camStream:null,
+  photoStart:null, camStream:null,
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
   finished:{},   // langKey -> score
@@ -373,13 +373,11 @@ function invalidateBioIfChanged(){
   if (!state.bioDone || state.bioMethod === 'none' || state.bioMethod === 'skipped') return;
   if (state.bioName === state.name && state.bioBirth === state.birth) return;
   const was = state.bioMethod;
-  state.bioDone = false; state.credId = null; state.photoStart = null; state.bioMethod = 'none';
+  state.bioDone = false; state.photoStart = null; state.bioMethod = 'none';
   $('bio').classList.remove('done');
   $('bio-ic').innerHTML = BIO_ICON;
   setupBio();
-  toast(was === 'photo'
-    ? '入力が変更されたため、顔写真を撮り直してください'
-    : '入力が変更されたため、もう一度指紋認証を行ってください');
+  toast('入力が変更されたため、顔写真を撮り直してください');
 }
 function syncStart(){
   $('btn-start').disabled = !SC.canStart(state);
@@ -395,13 +393,12 @@ function inputsReady(){
   return { ok:true, msg:'', name:n.value, birth:b.value };
 }
 
-/* 入力が揃うまで本人確認のボタンを押せないようにする */
+/* 入力が揃うまで撮影ボタンを押せないようにする */
 function gateBio(){
   const gate = $('bio-gate');
   if (state.bioDone){ if (gate) gate.textContent = ''; return; }
-  const r  = inputsReady();
-  const go = $('bio-go'), shot = $('bio-shot');
-  if (go && go.dataset.busy !== '1') go.disabled = !r.ok;
+  const r = inputsReady();
+  const shot = $('bio-shot');
   if (shot) shot.disabled = !r.ok;
   if (gate) gate.textContent = r.ok ? '' : '氏名と生年月日を入力すると本人確認に進めます';
   if (r.ok && $('bio-err')) $('bio-err').textContent = '';
@@ -423,7 +420,7 @@ async function setupBio(){
   if (state.bioMode === 'unavailable'){
     $('bio-title').textContent = '本人確認を利用できません';
     $('bio-desc').textContent  = state.caps.secure
-      ? 'この端末には対応する生体認証・カメラがありません'
+      ? 'この端末にはカメラがありません'
       : 'httpsで開かれていないため利用できません';
     body.innerHTML = '<button class="btn btn-ghost block" id="bio-skip">確認なしで続ける</button>';
     $('bio-skip').onclick = function(){
@@ -432,40 +429,13 @@ async function setupBio(){
     };
     syncStart(); return;
   }
-  if (state.bioMode === 'webauthn'){
-    const deviceMode = C.WEBAUTHN_DEVICE_MODE === true;
-    const needSetup  = deviceMode && !SC.hasDeviceCred();
-    $('bio-title').textContent = needSetup ? '指紋認証の初回設定' : '指紋認証で本人確認';
-    $('bio-desc').textContent  = needSetup
-      ? 'この端末では初めての利用です。1回だけ端末の登録が必要です'
-      : 'Macは電源ボタン、スマートフォンは指紋センサーに触れてください';
-    body.innerHTML = '<button class="btn btn-primary block" id="bio-go">'
-                   + (needSetup ? 'この端末を登録する' : '指紋認証する') + '</button>'
-                   + '<div class="err" id="bio-err" style="text-align:center"></div>'
-                   + (state.caps.camera
-                      ? '<button class="btn btn-ghost block" id="bio-alt">指紋認証が使えない場合はカメラで撮影する</button>'
-                      : '');
-    $('bio-go').onclick = runWebauthn;
-    if ($('bio-alt')) $('bio-alt').onclick = buildPhotoUI;
-    syncStart(); return;
-  }
   // photo
   buildPhotoUI();
 }
 
 const BIO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
-  + '<path d="M12 3c-2.2 0-4 1.6-4 3.6v2.1"/><path d="M16 9.2V6.6C16 4.6 14.2 3 12 3"/>'
-  + '<path d="M8 12.5c0 3.4-.6 5.8-1.6 7.5"/><path d="M12 11v3.5c0 2.6-.4 4.6-1.1 6.2"/>'
-  + '<path d="M16 12.2c0 3.6-.5 6.3-1.4 8.3"/><path d="M19.4 15.5c.2-1.1.3-2.2.3-3.3 0-4.1-3.4-7.4-7.7-7.4"/>'
-  + '<path d="M4.3 16.8c.6-1.5.9-3 .9-4.6 0-1.3.4-2.5 1.1-3.5"/></svg>';
-
-function backToBio(){
-  SC.closeCamera(state.camStream); state.camStream = null;
-  state.bioDone = false; state.photoStart = null; state.bioMethod = 'none';
-  $('bio').classList.remove('done');
-  $('bio-ic').innerHTML = BIO_ICON;
-  setupBio(); syncStart();
-}
+  + '<path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.2-2h8.2l1.2 2h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/>'
+  + '<circle cx="12" cy="13" r="3.6"/></svg>';
 
 function buildPhotoUI(){
   $('bio-title').textContent = 'カメラで本人確認';
@@ -473,9 +443,7 @@ function buildPhotoUI(){
   $('bio-body').innerHTML =
     '<video id="cam" playsinline muted></video>' +
     '<div class="btn-row"><button class="btn btn-primary" id="bio-shot">撮影する</button></div>' +
-    '<div class="err" id="bio-err"></div>' +
-    (state.caps.webauthn ? '<button class="btn btn-ghost block" id="bio-back-bio">指紋認証に戻る</button>' : '');
-  if ($('bio-back-bio')) $('bio-back-bio').onclick = backToBio;
+    '<div class="err" id="bio-err"></div>';
   gateBio();
   SC.openCamera($('cam')).then(function(st){ state.camStream = st; })
     .catch(function(e){
@@ -497,47 +465,12 @@ function buildPhotoUI(){
       state.bioDone = true; state.bioMethod = 'photo';
       state.bioName = ready.name; state.bioBirth = ready.birth;
       $('bio-body').innerHTML = '<img id="shot" alt="撮影した顔写真" src="'+state.photoStart+'">'
-        + '<div class="btn-row"><button class="btn btn-ghost" id="bio-retake">撮り直す</button></div>'
-        + (state.caps.webauthn ? '<button class="btn btn-ghost block" id="bio-back-bio">指紋認証に戻る</button>' : '');
+        + '<div class="btn-row"><button class="btn btn-ghost" id="bio-retake">撮り直す</button></div>';
       $('bio-retake').onclick = function(){ state.bioDone=false; state.photoStart=null; $('bio').classList.remove('done'); buildPhotoUI(); syncStart(); };
-      if ($('bio-back-bio')) $('bio-back-bio').onclick = backToBio;
       markBioDone('顔写真で本人確認しました');
       syncStart();
     }catch(e){ $('bio-err').textContent = '撮影に失敗しました'; }
   };
-}
-
-async function runWebauthn(){
-  const ready = inputsReady();
-  if (!ready.ok){ $('bio-err').textContent = ready.msg; return; }
-  const deviceMode = C.WEBAUTHN_DEVICE_MODE === true;
-  const needSetup  = deviceMode && !SC.hasDeviceCred();
-  const btn = $('bio-go');
-  btn.disabled = true; btn.dataset.busy = '1'; btn.textContent = '認証中…';
-  try{
-    const r = await SC.bioVerify({ name: ready.name });
-    state.credId = r.credId; state.bioDone = true; state.bioMethod = 'webauthn';
-    state.bioName = ready.name; state.bioBirth = ready.birth;
-    $('bio-body').innerHTML = '';
-    markBioDone(needSetup ? 'この端末を登録し、指紋で本人確認しました' : '指紋で本人確認しました');
-  }catch(e){
-    console.error('[SkillCheck] webauthn failed', e && e.name, e && e.message);
-    btn.dataset.busy = '0';
-    btn.disabled = false;
-    btn.textContent = needSetup ? 'この端末を登録する' : '指紋認証する';
-    $('bio-err').textContent = SC.jaBioError(e);
-    if (deviceMode && SC.hasDeviceCred() && !$('bio-reset')){
-      $('bio-body').insertAdjacentHTML('beforeend',
-        '<button class="btn btn-ghost block" id="bio-reset" style="margin-top:10px">この端末を登録し直す</button>');
-      $('bio-reset').onclick = function(){ SC.clearDeviceCred(); setupBio(); };
-    }
-    if (state.caps.camera && !$('bio-alt')){
-      $('bio-body').insertAdjacentHTML('beforeend',
-        '<button class="btn btn-ghost block" id="bio-alt" style="margin-top:10px">カメラでの本人確認に切り替える</button>');
-      $('bio-alt').onclick = buildPhotoUI;
-    }
-  }
-  syncStart();
 }
 
 function markBioDone(msg){
@@ -551,9 +484,7 @@ function markBioDone(msg){
 /* ================= 言語一覧 ================= */
 function renderLangs(){
   $('pb-name').textContent = state.name;
-  $('pb-bio').textContent  = state.bioMethod === 'webauthn' ? '本人確認 済（指紋認証）'
-                           : state.bioMethod === 'photo'    ? '本人確認 済（顔写真）'
-                           : '本人確認 なし';
+  $('pb-bio').textContent  = state.bioMethod === 'photo' ? '本人確認 済（顔写真）' : '本人確認 なし';
   const groups = [];
   LANGS.forEach(function(l){
     let g = groups.find(function(x){ return x.name === l.group; });
@@ -588,7 +519,6 @@ async function ensureSession(){
       candidate_name: state.name,
       birth_date: state.birth,
       auth_method: state.bioMethod,
-      cred_id: state.credId,
       photo_start: state.photoStart,
       user_agent: navigator.userAgent.slice(0,300),
     });
@@ -665,10 +595,6 @@ async function submitExam(){
   const btn = $('btn-submit'); btn.disabled = true; btn.textContent = '提出中…';
 
   let reauthOk = false;
-  if (C.REAUTH_ON_FINISH && state.bioMethod === 'webauthn'){
-    try{ await SC.bioAssert(state.credId); reauthOk = true; }
-    catch(e){ toast('提出時の再認証がキャンセルされました（記録に残ります）'); }
-  }
   let photoEnd = null;
   if (C.PHOTO_ON_FINISH && state.bioMethod === 'photo' && state.caps.camera){
     try{

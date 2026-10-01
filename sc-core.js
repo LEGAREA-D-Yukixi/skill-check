@@ -193,12 +193,7 @@
   function resolveBioMode(configMode, caps) {
     const c = caps || {};
     if (configMode === 'off') return 'off';
-    if (configMode === 'webauthn') return c.webauthn ? 'webauthn' : 'unavailable';
-    if (configMode === 'photo') return c.camera ? 'photo' : 'unavailable';
-    // auto
-    if (c.webauthn) return 'webauthn';
-    if (c.camera) return 'photo';
-    return 'unavailable';
+    return c.camera ? 'photo' : 'unavailable';
   }
 
   function canStart(state) {
@@ -213,17 +208,6 @@
      ブラウザやAPIが返す英文をそのまま画面に出さないための変換
      --------------------------------------------------------- */
 
-  const BIO_ERRORS = {
-    NotAllowedError:     '認証がキャンセルされたか、時間内に完了しませんでした',
-    InvalidStateError:   'この端末ではすでに登録されています',
-    NotSupportedError:   'この端末は指紋・顔認証に対応していません',
-    SecurityError:       '安全な接続（https）で開かれていないため利用できません',
-    AbortError:          '処理が中断されました',
-    ConstraintError:     '端末の設定により認証を利用できません',
-    UnknownError:        '端末側の問題で認証できませんでした',
-    TypeError:           '認証の設定に問題があります',
-  };
-
   const CAMERA_ERRORS = {
     NotAllowedError:     'カメラの使用が許可されていません。ブラウザの設定から許可してください',
     NotFoundError:       'カメラが見つかりません',
@@ -232,11 +216,6 @@
     SecurityError:       '安全な接続（https）で開かれていないため利用できません',
     AbortError:          'カメラの起動が中断されました',
   };
-
-  function jaBioError(e) {
-    if (!e) return '認証に失敗しました';
-    return BIO_ERRORS[e.name] || '認証に失敗しました';
-  }
 
   function jaCameraError(e) {
     if (!e) return 'カメラを利用できません';
@@ -269,7 +248,6 @@
 
   const api = {
     normalizeName: normalizeName,
-    jaBioError: jaBioError,
     jaCameraError: jaCameraError,
     jaHttpError: jaHttpError,
     jaAuthError: jaAuthError,
@@ -321,93 +299,12 @@
 
   /* ---- 端末が何に対応しているか ---- */
   async function detectCaps() {
-    const caps = { webauthn: false, camera: false, secure: !!window.isSecureContext };
-    try {
-      if (window.PublicKeyCredential &&
-          PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-        caps.webauthn = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      }
-    } catch (e) { caps.webauthn = false; }
+    const caps = { camera: false, secure: !!window.isSecureContext };
     try {
       caps.camera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     } catch (e) { caps.camera = false; }
-    if (!caps.secure) { caps.webauthn = false; caps.camera = false; }
+    if (!caps.secure) caps.camera = false;
     return caps;
-  }
-
-  /* ---- 指紋・顔認証（WebAuthn） ----
-     既定では受験者ごとに登録し、受験者と認証記録を1対1で対応させる。
-     WEBAUTHN_DEVICE_MODE を true にすると端末に1つだけ登録する運用になる。 */
-  const DEVICE_CRED_KEY = 'sc_device_cred';
-
-  function hasDeviceCred() {
-    try { return !!localStorage.getItem(DEVICE_CRED_KEY); } catch (e) { return false; }
-  }
-  function getDeviceCred() {
-    try { return localStorage.getItem(DEVICE_CRED_KEY); } catch (e) { return null; }
-  }
-  function clearDeviceCred() {
-    try { localStorage.removeItem(DEVICE_CRED_KEY); } catch (e) {}
-  }
-
-  /* ---- 指紋の登録 ---- */
-  async function bioRegister(profile) {
-    const p = profile || {};
-    const label = p.device ? 'SkillCheck 受験端末' : (p.name || '受験者');
-    const userId = randomBytes(16);
-    const cred = await navigator.credentials.create({
-      publicKey: {
-        challenge: randomBytes(32),
-        rp: { name: (cfg().ORG_NAME || 'SkillCheck') + ' SkillCheck', id: location.hostname },
-        user: { id: userId, name: label, displayName: label },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        authenticatorSelection: {
-          authenticatorAttachment: 'platform',  // 端末内の認証器のみ（QRの別端末連携を出さない）
-          userVerification: 'required',         // 指紋・顔の照合を必須にする
-          requireResidentKey: false,
-          residentKey: 'discouraged',           // 同期パスキーにしない
-        },
-        hints: ['client-device'],               // この端末で認証する意図を明示
-        timeout: 60000,
-        attestation: 'none',
-      },
-    });
-    if (!cred) throw new Error('登録がキャンセルされました');
-    return { method: 'webauthn', credId: bufToB64url(cred.rawId), at: new Date().toISOString() };
-  }
-
-  /* ---- 指紋の照合 ---- */
-  async function bioAssert(credId) {
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge: randomBytes(32),
-        allowCredentials: credId
-          ? [{ type: 'public-key', id: b64urlToBuf(credId), transports: ['internal'] }]
-          : [],
-        userVerification: 'required',
-        hints: ['client-device'],
-        timeout: 60000,
-      },
-    });
-    if (!assertion) throw new Error('認証がキャンセルされました');
-    return { ok: true, at: new Date().toISOString() };
-  }
-
-  /* ---- 受験開始時の本人確認 ---- */
-  async function bioVerify(profile) {
-    if (cfg().WEBAUTHN_DEVICE_MODE === true) {
-      const saved = getDeviceCred();
-      if (saved) {
-        await bioAssert(saved);
-        return { method: 'webauthn', credId: saved, at: new Date().toISOString(), firstTime: false };
-      }
-      const d = await bioRegister({ device: true });
-      try { localStorage.setItem(DEVICE_CRED_KEY, d.credId); } catch (e) {}
-      return { method: 'webauthn', credId: d.credId, at: d.at, firstTime: true };
-    }
-    // 既定：受験者ごとに登録する
-    const r = await bioRegister({ name: (profile || {}).name });
-    return { method: 'webauthn', credId: r.credId, at: r.at, firstTime: true };
   }
 
   /* ---- カメラ ---- */
@@ -505,12 +402,6 @@
 
   Object.assign(api, {
     detectCaps: detectCaps,
-    bioRegister: bioRegister,
-    bioAssert: bioAssert,
-    bioVerify: bioVerify,
-    hasDeviceCred: hasDeviceCred,
-    getDeviceCred: getDeviceCred,
-    clearDeviceCred: clearDeviceCred,
     openCamera: openCamera,
     closeCamera: closeCamera,
     snapPhoto: snapPhoto,
