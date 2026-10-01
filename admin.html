@@ -499,11 +499,34 @@ function renderTotal(){
 }
 
 /* 録画が残っていない理由をログから拾う */
+const UPLOAD_JA = {
+  '-1':  'ネットワークに接続できません',
+  '400': 'リクエストが拒否されました。バケット名を確認してください',
+  '401': '接続キーが正しくありません',
+  '403': 'アップロードの権限がありません。storage.objects の anon INSERT ポリシーを確認してください',
+  '404': 'バケットが見つかりません。sc-recordings を作成してください',
+  '409': '同名のファイルが既にあります',
+  '413': 'ファイルが大きすぎます。バケットのサイズ上限を確認してください',
+};
+
 function recReason(){
   const e = P.events || [];
   const find = function(type){ for (let i=0;i<e.length;i++) if (e[i].type===type) return e[i]; return null; };
+
+  if (!e.length) return '操作ログも保存されていません。Supabaseへの保存に失敗した可能性があります';
+
+  // 送信の失敗が最も原因が特定しやすいので先に見る
+  const up = find('upload_fail');
+  if (up){
+    const code = String(up.status);
+    return '録画はできましたが送信に失敗しました（コード ' + code + '）。'
+         + (UPLOAD_JA[code] || 'Storageの設定を確認してください')
+         + (up.detail ? '　詳細: ' + up.detail : '');
+  }
+
   const result = find('rec_result');
   if (result && result.note) return result.note;
+
   const lines = [];
   const scr = find('screen_off');
   if (scr) lines.push('画面：' + (scr.msg || scr.code || '取得できず'));
@@ -511,9 +534,13 @@ function recReason(){
   if (cam) lines.push('カメラ：' + (cam.name || '取得できず'));
   const fail = find('rec_fail');
   if (fail) lines.push('録画開始に失敗（' + (fail.name || '不明') + '）');
-  if (!e.length) return '操作ログも保存されていません。Supabaseへの保存に失敗した可能性があります';
+
   if (!lines.length && !find('rec_start')) return '録画が開始されていません（同意なし、または端末が非対応）';
   if (result && !result.bytes) return (lines.join(' / ') || '録画データが空でした');
+  if (find('rec_start') && !find('upload_ok')){
+    return '録画はできましたが、保存先に届いていません。'
+         + 'このブラウザのコンソールと Supabase の Storage 設定を確認してください';
+  }
   return lines.join(' / ') || '理由を特定できません';
 }
 

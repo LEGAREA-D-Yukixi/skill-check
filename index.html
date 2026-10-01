@@ -733,8 +733,15 @@ async function submitExam(){
     try{
       const name = SC.newId() + '.' + SC.extFor(state.recMime);
       videoPath = await SC.uploadRecording(recBlob, state.lang.key + '/' + name);
+      state.log.add('upload_ok', { path: videoPath, bytes: recBlob.size });
     }catch(e){
       console.error('[SkillCheck] upload failed', e.status, e.message, e.body);
+      // 管理画面から原因を追えるよう、送信の失敗もログに残す
+      state.log.add('upload_fail', {
+        status: e.status == null ? -1 : e.status,
+        bytes: recBlob.size,
+        detail: String(e.body || e.message || '').slice(0, 300),
+      });
       notes.push('録画を送信できませんでした（' + SC.jaHttpError(e.status) + '）');
     }
   }
