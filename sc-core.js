@@ -484,7 +484,9 @@
   }
 
   // el : 録画してよい領域のルート要素（模範解答はこの外側に置くこと）
-  async function startScreenCapture(el) {
+  // opts.narrow が false なら絞り込まず、タブ全体をそのまま撮る
+  async function startScreenCapture(el, opts) {
+    const wide = !el || (opts && opts.narrow === false);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
       throw tagged('このブラウザは画面録画に対応していません', 'unsupported');
     }
@@ -522,12 +524,13 @@
       throw tagged('画面の映像を取得できませんでした', 'no-frames');
     }
 
+    // タブ全体を録画する場合はここで終わり（絞り込まない）
+    if (wide) return { stream: stream, mode: 'tab', stop: stopAll, video: view };
+
     // 撮影範囲を解答エリアに絞る。
     // 対象要素が条件を満たさないと、成功を返したまま1フレームも届かないことがあるため、
     // 絞ったあとに必ず映像を確かめ、駄目なら元に戻す。
     // 解除の呼び出しが返らない場合もあるので、すべてタイムアウト付きで扱う。
-    // Element Capture は重なった要素も除外できるため最優先。
-    // これが使えると模範解答を解答欄の上に重ねて表示できる。
     let mode = 'manual';   // どれも使えない場合は合成時に切り出す
     if (window.RestrictionTarget && track.restrictTo) {
       try {
