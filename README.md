@@ -1,7 +1,4 @@
-# SkillCheck — 採用スキルチェックシステム
-
-株式会社LEGAREA 採用選考用の言語スキル判定ツール。
-ChallengeBoard / L-1グランプリと同じ構成（バニラJS + Supabase + GitHub Pages）で、**追加コストゼロ**で運用できます。
+# SkillCheck — スキルチェックシステム
 
 ## ファイル構成
 
@@ -14,8 +11,6 @@ ChallengeBoard / L-1グランプリと同じ構成（バニラJS + Supabase + Gi
 | `sc-code.js` | 記述式（写経）の問題データ（10言語 × 6問） |
 | `config.js` | 設定（Supabase接続・出題数・合格ライン・本人確認方式） |
 
-**6ファイルは常にセットで配置してください。**
-
 ## セットアップ
 
 ### 1. Supabase
@@ -24,13 +19,6 @@ ChallengeBoard / L-1グランプリと同じ構成（バニラJS + Supabase + Gi
 3. 管理者ユーザーを Authentication > Users から追加
 
 ### 2. config.js
-
-Supabase の接続情報は**設定済み**です。そのままアップロードできます。
-
-```js
-SUPABASE_URL: 'https://yklwkovbphqmiucnmcmu.supabase.co',
-SUPABASE_ANON_KEY: 'sb_publishable_...',
-```
 
 プロジェクトを変更する場合のみ書き換えてください。
 キーは公開前提の publishable key です。anon に SELECT 権限を与えていないため、
