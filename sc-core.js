@@ -480,7 +480,7 @@
     if (window.CropTarget && proto && proto.cropTo) return 'region';
     if (window.RestrictionTarget) return 'element';
     if (window.CropTarget) return 'region';
-    return 'unrestricted';
+    return 'manual';   // 絞り込みAPIが無くても合成時に切り出せる
   }
 
   // el : 録画してよい領域のルート要素（模範解答はこの外側に置くこと）
@@ -526,7 +526,7 @@
     // 対象要素が条件を満たさないと、成功を返したまま1フレームも届かないことがあるため、
     // 絞ったあとに必ず映像を確かめ、駄目なら元に戻す。
     // 解除の呼び出しが返らない場合もあるので、すべてタイムアウト付きで扱う。
-    let mode = 'full';
+    let mode = 'manual';   // ブラウザ側で絞れない場合は合成時に切り出す
     if (window.CropTarget && track.cropTo) {
       try {
         const target = await limit(window.CropTarget.fromElement(el), 3000);
@@ -535,7 +535,7 @@
         else await limit(track.cropTo(null), 3000).catch(function () {});
       } catch (e) { /* 次の方式を試す */ }
     }
-    if (mode === 'full' && window.RestrictionTarget && track.restrictTo) {
+    if (mode === 'manual' && window.RestrictionTarget && track.restrictTo) {
       try {
         const target = await limit(window.RestrictionTarget.fromElement(el), 3000);
         await limit(track.restrictTo(target), 3000);
@@ -548,7 +548,7 @@
       stopAll();
       throw tagged('画面の映像が途切れました', 'no-frames');
     }
-    // mode が 'full' のままでもタブの映像は流れているのでそのまま録画する
+    // mode が 'manual' のままでも、合成時に受験カードの範囲だけを描くので模範解答は映らない
     return { stream: stream, mode: mode, stop: stopAll, video: view };
   }
 
@@ -609,27 +609,42 @@
     cv.width = w; cv.height = h;
     const ctx = cv.getContext('2d');
     const sv = screenVideo || null;
+    const clipEl = o.clipEl || null;   // 指定するとこの要素の範囲だけを描く
     const cvid = camStream ? videoFrom(camStream) : null;
     let timer = null;
 
-    function drawContain(video) {
+    /* 画面の描画。
+       clipEl が指定されている場合は、その要素の矩形だけを切り出して描く。
+       ブラウザ側で撮影範囲を絞れないときの代替で、範囲外（模範解答など）は
+       canvas に一度も描かれないため録画にも残らない。 */
+    function drawScreen(video) {
       const vw = video.videoWidth, vh = video.videoHeight;
       if (!vw || !vh) return;
-      const s = Math.min(w / vw, h / vh);
-      const dw = vw * s, dh = vh * s;
-      ctx.drawImage(video, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      let sx = 0, sy = 0, sw = vw, sh = vh;
+      if (clipEl) {
+        const iw = window.innerWidth || 0, ih = window.innerHeight || 0;
+        if (!iw || !ih) return;                 // 対応が取れないときは描かない
+        const r = clipEl.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const kx = vw / iw, ky = vh / ih;
+        sx = Math.max(0, Math.floor(r.left * kx));
+        sy = Math.max(0, Math.floor(r.top * ky));
+        sw = Math.min(vw - sx, Math.ceil(r.width * kx));
+        sh = Math.min(vh - sy, Math.ceil(r.height * ky));
+        if (sw <= 0 || sh <= 0) return;         // 取り切れないときも描かない
+      }
+      const s = Math.min(w / sw, h / sh);
+      const dw = sw * s, dh = sh * s;
+      ctx.drawImage(video, sx, sy, sw, sh, (w - dw) / 2, (h - dh) / 2, dw, dh);
     }
     function draw() {
       ctx.fillStyle = '#0b1730';
       ctx.fillRect(0, 0, w, h);
-      if (sv) drawContain(sv);
+      if (sv) drawScreen(sv);
       if (cvid && cvid.videoWidth) {
         const cw = Math.round(w * 0.22), ch = Math.round(cw * 0.75);
         const x = w - cw - 10, y = h - ch - 10;
-        ctx.save();
-        ctx.translate(x + cw, y); ctx.scale(-1, 1);   // 鏡像で描画
-        ctx.drawImage(cvid, 0, 0, cw, ch);
-        ctx.restore();
+        ctx.drawImage(cvid, x, y, cw, ch);   // 実像のまま描く（審査時に読めるように）
         ctx.strokeStyle = 'rgba(255,255,255,.55)';
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, cw, ch);

@@ -26,11 +26,11 @@ window.SC_CONFIG = {
      画面の撮影範囲を絞れないブラウザでは、画面を撮らずカメラのみ録画します。 */
   RECORD: true,
   RECORD_SCREEN: true,     // 画面も録画する（Chrome / Edge のみ対応）
-  RECORD_BITRATE: 180000,  // 合成映像のビットレート（約1.4MB/分）
-  RECORD_CANVAS_W: 720,    // 録画する映像の幅
-  RECORD_CANVAS_H: 450,
-  RECORD_WIDTH: 320,       // カメラ側の取得解像度
-  RECORD_FPS: 5,
+  RECORD_BITRATE: 700000,  // 合成映像のビットレート（約5MB/分）
+  RECORD_CANVAS_W: 1280,   // 録画する映像の幅（コードが読める解像度）
+  RECORD_CANVAS_H: 800,
+  RECORD_WIDTH: 480,       // カメラ側の取得解像度
+  RECORD_FPS: 8,
   RECORDING_BUCKET: 'sc-recordings',
 
   /* ---- 表示 ---- */

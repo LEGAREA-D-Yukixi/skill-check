@@ -33,6 +33,8 @@ input{font:inherit}
 
 /* ===== 共通レイアウト ===== */
 .wrap{max-width:960px;margin:0 auto;padding:22px 18px 52px}
+/* 受験中は模範解答と並べるため広げる */
+body.exam-mode .wrap{max-width:1420px}
 .brand{margin-bottom:26px}
 .brand b{color:#fff;font-size:22px;font-weight:800;letter-spacing:.05em}
 
@@ -124,6 +126,25 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 }
 
 /* ===== テスト ===== */
+/* ===== 受験画面のレイアウト =====
+   受験カード（録画対象）の幅は問題の種別で変えない。
+   幅が変わると切り抜きサイズが変わり、録画に黒帯が出るため。 */
+.exam-grid{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
+.model-card{display:none}
+.exam-grid.has-model .model-card{display:block}
+@media(min-width:1000px){
+  .exam-grid{grid-template-columns:minmax(300px,0.85fr) 1.15fr}
+  .model-card{display:block;visibility:hidden;position:sticky;top:18px}
+  .exam-grid.has-model .model-card{display:block;visibility:visible}
+}
+.model-card{padding:18px}
+.model-head{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:800;margin-bottom:10px}
+.model-tag{
+  margin-left:auto;font-size:10.5px;font-weight:700;color:#8a6d1f;background:#fdf1d4;
+  border:1px solid #f0d49a;border-radius:999px;padding:3px 10px;
+}
+.model-note{font-size:11.5px;color:var(--muted);margin-top:10px}
+
 /* 画面録画の対象。contain:paint が無いと Element Capture が映像を返さない */
 #ex-capture{contain:paint}
 .exam-head{
@@ -177,7 +198,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
   border-radius:11px;padding:14px 16px;width:100%;
   white-space:pre;overflow:auto;
 }
-.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:300px}
+.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:440px}
 .code-edit{
   background:#fbfcfe;border:1.5px solid var(--line);color:var(--ink);
   min-height:180px;resize:vertical;display:block;
@@ -292,6 +313,14 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 
   <!-- ============ 3. テスト ============ -->
   <section id="screen-exam" class="screen">
+    <div class="exam-grid" id="exam-grid">
+
+      <!-- 模範解答：録画の対象外。#ex-capture の外側に置くこと -->
+      <aside class="card model-card" id="ex-model-card">
+        <div class="model-head"><span>模範解答</span><span class="model-tag">録画されません</span></div>
+        <pre class="code-box" id="ex-model"></pre>
+        <p class="model-note">このとおりに解答欄へ入力してください。</p>
+      </aside>
 
       <!-- 録画される範囲 -->
       <div class="card" id="ex-capture">
@@ -299,6 +328,8 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
           <div><div class="lng" id="ex-lang">—</div><div class="cnt" id="ex-cnt">1 / 10</div></div>
           <div style="display:flex;align-items:center;gap:11px">
             <span class="rec off" id="ex-rec"><i></i><span id="ex-rec-txt">録画なし</span></span>
+            <button class="btn btn-accent" id="btn-rescreen"
+                    style="display:none;padding:9px 15px;font-size:13px">画面の録画を開始</button>
             <button class="btn btn-ghost" id="btn-quit" style="padding:9px 15px;font-size:13px">中断</button>
           </div>
         </div>
@@ -310,10 +341,6 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 
           <div class="code-wrap" id="ex-code" style="display:none">
             <div class="code-task" id="ex-task"></div>
-            <div class="code-panel">
-              <div class="code-label">模範解答</div>
-              <pre class="code-box" id="ex-model"></pre>
-            </div>
             <div class="code-panel">
               <div class="code-label">解答欄</div>
               <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
@@ -333,6 +360,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
           </div>
         </div>
       </div>
+    </div>
   </section>
 
   <!-- ============ 4. 結果 ============ -->
@@ -387,6 +415,7 @@ function show(id){
   ['screen-top','screen-langs','screen-exam','screen-result'].forEach(function(s){
     $(s).classList.toggle('on', s===id);
   });
+  document.body.classList.toggle('exam-mode', id === 'screen-exam');
   window.scrollTo({top:0, behavior:'instant'});
 }
 
@@ -576,7 +605,7 @@ async function startRecording(){
   // 1. 画面共有を最初に求める。
   //    許可ダイアログはタップ直後の短い間しか出せないため、カメラより先に呼ぶ必要がある。
   let screen = null;
-  if (C.RECORD_SCREEN && state.caps.screen !== 'none' && state.caps.screen !== 'unrestricted'){
+  if (C.RECORD_SCREEN && state.caps.screen !== 'none'){
     try{
       screen = await SC.startScreenCapture($('ex-capture'));
       state.screenStop = screen.stop;
@@ -613,8 +642,39 @@ async function startRecording(){
   }
 
   try{
+    // 切り抜きの反映にわずかな遅れがあるため、寸法が安定してから読む
+    if (screen && screen.video){
+      let last = -1;
+      for (let i = 0; i < 12; i++){
+        const w = screen.video.videoWidth;
+        if (w && w === last) break;
+        last = w;
+        await new Promise(function(r){ setTimeout(r, 120); });
+      }
+    }
+    // ブラウザ側で絞れなかった場合は、合成時に受験カードの範囲だけを切り出す
+    const clipEl = (screen && screen.mode === 'manual') ? $('ex-capture') : null;
+
+    // 撮影範囲の縦横比に合わせる。黒帯が出ないぶん同じ容量でも精細になる
+    let cw = C.RECORD_CANVAS_W, ch = C.RECORD_CANVAS_H;
+    if (screen && screen.video && screen.video.videoWidth){
+      const vw = screen.video.videoWidth, vh = screen.video.videoHeight;
+      let rw = vw, rh = vh;
+      if (clipEl){
+        const r = clipEl.getBoundingClientRect();
+        rw = Math.round(r.width * vw / (window.innerWidth || 1));
+        rh = Math.round(r.height * vh / (window.innerHeight || 1));
+      }
+      if (rw > 0 && rh > 0){
+        cw = Math.min(C.RECORD_CANVAS_W, rw);
+        ch = Math.round(cw * rh / rw);
+      }
+    } else if (cam){
+      cw = Math.min(C.RECORD_CANVAS_W, 640); ch = Math.round(cw * 0.75);
+    }
+    cw += cw % 2; ch += ch % 2;   // エンコーダの都合で偶数にする
     state.composer = SC.createComposer(screen && screen.video, cam, {
-      width: C.RECORD_CANVAS_W, height: C.RECORD_CANVAS_H, fps: C.RECORD_FPS,
+      width: cw, height: ch, fps: C.RECORD_FPS, clipEl: clipEl,
     });
     state.composer.start();
     // 映像が流れ始めるのを待ってから録画を開始する（空の動画を防ぐ）
@@ -626,6 +686,7 @@ async function startRecording(){
     state.recMime = state.rec.mime;
     state.recKind = screen ? ('画面＋カメラ（' + screen.mode + '）') : 'カメラのみ';
     setRecBadge(true, screen ? '画面とカメラを録画中' : 'カメラのみ録画中');
+    $('btn-rescreen').style.display = screen ? 'none' : '';
     state.log.add('rec_start', { mime: state.rec.mime, kind: state.recKind });
   }catch(e){
     console.error('[SkillCheck] recorder failed', e && e.name, e && e.message);
@@ -664,6 +725,7 @@ function renderQ(){
   $('ex-q').textContent = isCode ? item.t : item.q;
   $('ex-choices').style.display = isCode ? 'none' : '';
   $('ex-code').style.display = isCode ? '' : 'none';
+  $('exam-grid').classList.toggle('has-model', isCode);
 
   if (isCode){ renderCodeQ(item); }
   else { renderChoiceQ(item, n); }
@@ -885,6 +947,14 @@ $('btn-start').onclick = function(){ renderLangs(); show('screen-langs'); };
 $('btn-prev').onclick  = function(){ if(state.cur>0){ state.cur--; renderQ(); } };
 $('btn-next').onclick  = function(){ if(state.cur<state.exam.length-1){ state.cur++; renderQ(); } };
 $('btn-submit').onclick = submitExam;
+/* 画面共有を断られた場合に録り直す。ユーザー操作が無いと許可を求められないためボタンにしている */
+$('btn-rescreen').onclick = async function(){
+  const b = this; b.disabled = true; b.textContent = '開始中…';
+  state.log.add('rescreen', {});
+  await stopRecording();
+  await startRecording();
+  b.disabled = false; b.textContent = '画面の録画を開始';
+};
 $('btn-quit').onclick  = function(){
   if(!confirm('この試験を中断して一覧に戻りますか？解答と録画は保存されません。')) return;
   stopRecording();
