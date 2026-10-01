@@ -49,6 +49,11 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 /* ===== TOP：入力 ===== */
 .field{margin-top:20px}
 .field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:7px}
+.field select{
+  width:100%;padding:14px 15px;border:1.5px solid var(--line);border-radius:11px;
+  background:#fbfcfe;color:var(--ink);font-size:15px;
+}
+.field select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12)}
 .field input{
   width:100%;padding:14px 15px;border:1.5px solid var(--line);border-radius:11px;
   background:#fbfcfe;color:var(--ink);font-size:16px;transition:border-color .15s,box-shadow .15s;
@@ -58,28 +63,6 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 .err{color:var(--ng);font-size:12px;margin-top:6px;min-height:1em}
 
 /* 本人確認 */
-.bio{
-  margin-top:24px;border:1.5px solid var(--line);border-radius:14px;
-  background:linear-gradient(180deg,#f7faff,#eef4ff);padding:18px 16px;
-}
-.bio-head{display:flex;align-items:center;gap:11px}
-.bio-ic{
-  width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;
-  background:#fff;border:1.5px solid var(--line);
-}
-.bio-ic svg{width:23px;height:23px}
-.bio-head b{font-size:14.5px;display:block}
-.bio-head small{color:var(--muted);font-size:12px;display:block}
-.bio-body{margin-top:14px}
-.bio-body .err + .btn.block{margin-top:4px}
-.bio-body .btn-row + .btn.block{margin-top:10px}
-.bio-body .btn.block + .btn.block{margin-top:10px}
-.bio-gate{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;min-height:1em}
-.bio.done{border-color:var(--ok);background:linear-gradient(180deg,#f2fbf7,#e8f7f0)}
-.bio.done .bio-ic{border-color:var(--ok)}
-
-video#cam{width:100%;max-width:300px;border-radius:12px;background:#0b1730;display:block;transform:scaleX(-1)}
-img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:scaleX(-1)}
 
 /* ボタン */
 .btn{
@@ -175,6 +158,23 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 .dot.cur{border-color:var(--orange);box-shadow:0 0 0 3px rgba(245,158,11,.22)}
 .hint{color:var(--muted);font-size:12.5px;margin-top:12px;min-height:1em}
 
+/* ===== 受験画面のレイアウト ===== */
+.exam-grid{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
+@media(min-width:900px){
+  .exam-grid{grid-template-columns:minmax(300px,0.8fr) 1.2fr}
+  .exam-grid > .card:not(.model-card){grid-column:2}
+  .model-card{position:sticky;top:18px}
+  .exam-grid:not(.has-model){grid-template-columns:1fr}
+  .exam-grid:not(.has-model) > .card:not(.model-card){grid-column:1}
+}
+.model-card{padding:18px}
+.model-head{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:800;margin-bottom:10px}
+.model-tag{
+  margin-left:auto;font-size:10.5px;font-weight:700;color:#8a6d1f;background:#fdf1d4;
+  border:1px solid #f0d49a;border-radius:999px;padding:3px 10px;
+}
+.model-note{font-size:11.5px;color:var(--muted);margin-top:10px}
+
 /* ===== 記述問題（写経） ===== */
 .code-wrap{margin-top:18px}
 .code-task{
@@ -194,18 +194,12 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
   border-radius:11px;padding:14px 16px;width:100%;
   white-space:pre;overflow:auto;
 }
-.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:230px}
+.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:420px}
 .code-edit{
   background:#fbfcfe;border:1.5px solid var(--line);color:var(--ink);
   min-height:180px;resize:vertical;display:block;
 }
 .code-edit:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12);background:#fff}
-.model{position:relative}
-.model::after{
-  content:"録画されません";position:absolute;right:10px;top:0;
-  font-size:10.5px;font-weight:700;color:#8a6d1f;background:#fdf1d4;
-  border:1px solid #f0d49a;border-radius:999px;padding:2px 9px;
-}
 
 /* ===== 録画インジケータ ===== */
 .rec{
@@ -219,13 +213,10 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 
 /* ===== 録画の同意 ===== */
 .consent{
-  margin-top:20px;border:1.5px solid var(--line);border-radius:14px;
-  background:#f8fafd;padding:16px;
+  margin-top:22px;border:1.5px solid var(--line);border-radius:14px;
+  background:#f8fafd;padding:16px 18px;
 }
-.consent h4{font-size:13.5px;margin-bottom:8px}
-.consent ul{margin:0 0 12px 18px;font-size:12.5px;color:var(--muted)}
-.consent li{margin-top:4px}
-.consent label{display:flex;gap:10px;align-items:flex-start;font-size:13px;cursor:pointer}
+.consent label{display:flex;gap:11px;align-items:center;font-size:14px;font-weight:700;cursor:pointer}
 .consent input{margin-top:3px;width:17px;height:17px;flex:none;accent-color:var(--blue)}
 
 /* ===== 結果 ===== */
@@ -290,47 +281,27 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
         <div class="err" id="err-birth"></div>
       </div>
 
-      <div class="bio" id="bio">
-        <div class="bio-head">
-          <div class="bio-ic" id="bio-ic">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3c-2.2 0-4 1.6-4 3.6v2.1"/><path d="M16 9.2V6.6C16 4.6 14.2 3 12 3"/>
-              <path d="M8 12.5c0 3.4-.6 5.8-1.6 7.5"/><path d="M12 11v3.5c0 2.6-.4 4.6-1.1 6.2"/>
-              <path d="M16 12.2c0 3.6-.5 6.3-1.4 8.3"/><path d="M19.4 15.5c.2-1.1.3-2.2.3-3.3 0-4.1-3.4-7.4-7.7-7.4"/>
-              <path d="M4.3 16.8c.6-1.5.9-3 .9-4.6 0-1.3.4-2.5 1.1-3.5"/>
-            </svg>
-          </div>
-          <div>
-            <b id="bio-title">本人確認</b>
-            <small id="bio-desc">確認中…</small>
-          </div>
-        </div>
-        <div class="bio-body" id="bio-body"></div>
-        <div class="bio-gate" id="bio-gate"></div>
+      <div class="field" id="cam-field" style="display:none">
+        <label for="in-cam">使用するカメラ</label>
+        <select id="in-cam"></select>
       </div>
 
       <div class="consent" id="consent" style="display:none">
-        <h4>受験中の記録について</h4>
-        <ul>
-          <li>受験中はカメラ映像を録画し、操作の記録（解答の変更履歴）を残します</li>
-          <li>画面そのものは録画しません。模範解答は記録に残りません</li>
-          <li>記録は採用選考の確認のみに使用し、目的外では利用しません</li>
-        </ul>
-        <label><input type="checkbox" id="consent-ok"><span>上記に同意して受験します</span></label>
+        <label><input type="checkbox" id="consent-ok"><span>受験中の録画に同意します</span></label>
       </div>
 
       <div class="btn-row">
         <button class="btn btn-primary block" id="btn-start" disabled>試験一覧へ進む</button>
       </div>
     </div></div>
-    <p class="note">入力された氏名・生年月日・本人確認の記録は採用選考の目的にのみ使用します。</p>
+    <p class="note">入力された氏名・生年月日と録画は採用選考の目的にのみ使用します。</p>
   </section>
 
   <!-- ============ 2. 言語一覧 ============ -->
   <section id="screen-langs" class="screen">
     <div class="person-bar">
       <div class="who"><span>受験者</span><b id="pb-name">—</b></div>
-      <div class="badge-ok" id="pb-bio">本人確認 済</div>
+      <div class="badge-ok" id="pb-bio">録画あり</div>
     </div>
     <div id="lang-groups"></div>
     <p class="note">受験したい言語をタップしてください。1言語あたり<span id="note-count">10</span>問・所要15分程度です。<br>記述問題は模範解答を見ながら入力する形式です。同じ言語を何度でも受け直せますが、記録はすべて残ります。</p>
@@ -338,44 +309,52 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 
   <!-- ============ 3. テスト ============ -->
   <section id="screen-exam" class="screen">
-    <div class="card">
-      <div class="exam-head">
-        <div><div class="lng" id="ex-lang">—</div><div class="cnt" id="ex-cnt">1 / 10</div></div>
-        <div style="display:flex;align-items:center;gap:11px">
-          <span class="rec off" id="ex-rec"><i></i><span id="ex-rec-txt">録画なし</span></span>
-          <button class="btn btn-ghost" id="btn-quit" style="padding:9px 15px;font-size:13px">中断</button>
-        </div>
-      </div>
-      <div class="bar"><i id="ex-bar" style="width:0%"></i></div>
-      <div class="pad">
-        <div class="qno" id="ex-qno">Q1</div>
-        <div class="qtext" id="ex-q">—</div>
-        <div class="choices" id="ex-choices"></div>
+    <div class="exam-grid">
 
-        <div class="code-wrap" id="ex-code" style="display:none">
-          <div class="code-task" id="ex-task"></div>
-          <div class="code-panel model" data-norec="1">
-            <div class="code-label">模範解答（このまま入力してください）</div>
-            <pre class="code-box" id="ex-model"></pre>
+      <!-- 模範解答：録画の対象外に置く。#ex-capture の外側であることが必須 -->
+      <aside class="card model-card" id="ex-model-card" style="display:none">
+        <div class="model-head">
+          <span>模範解答</span>
+          <span class="model-tag">録画されません</span>
+        </div>
+        <pre class="code-box" id="ex-model"></pre>
+        <p class="model-note">このとおりに右（下）の解答欄へ入力してください。</p>
+      </aside>
+
+      <!-- ここから下だけが録画されます -->
+      <div class="card" id="ex-capture">
+        <div class="exam-head">
+          <div><div class="lng" id="ex-lang">—</div><div class="cnt" id="ex-cnt">1 / 10</div></div>
+          <div style="display:flex;align-items:center;gap:11px">
+            <span class="rec off" id="ex-rec"><i></i><span id="ex-rec-txt">録画なし</span></span>
+            <button class="btn btn-ghost" id="btn-quit" style="padding:9px 15px;font-size:13px">中断</button>
           </div>
-          <div class="code-panel">
-            <div class="code-label">解答欄
-              <span class="code-state" id="ex-cstate"></span>
+        </div>
+        <div class="bar"><i id="ex-bar" style="width:0%"></i></div>
+        <div class="pad">
+          <div class="qno" id="ex-qno">Q1</div>
+          <div class="qtext" id="ex-q">—</div>
+          <div class="choices" id="ex-choices"></div>
+
+          <div class="code-wrap" id="ex-code" style="display:none">
+            <div class="code-task" id="ex-task"></div>
+            <div class="code-panel">
+              <div class="code-label">解答欄<span class="code-state" id="ex-cstate"></span></div>
+              <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
+                        autocomplete="off" autocorrect="off" wrap="off"></textarea>
             </div>
-            <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
-                      autocomplete="off" autocorrect="off" wrap="off"></textarea>
+            <div class="btn-row" style="margin-top:12px">
+              <button class="btn btn-ghost" id="btn-reset-code" style="flex:0 0 auto">元のコードに戻す</button>
+            </div>
           </div>
-          <div class="btn-row" style="margin-top:12px">
-            <button class="btn btn-ghost" id="btn-reset-code" style="flex:0 0 auto">元のコードに戻す</button>
-          </div>
-        </div>
 
-        <div class="dots" id="ex-dots"></div>
-        <div class="hint" id="ex-left"></div>
-        <div class="btn-row">
-          <button class="btn btn-ghost" id="btn-prev">前の問題</button>
-          <button class="btn btn-primary" id="btn-next">次の問題</button>
-          <button class="btn btn-accent" id="btn-submit" style="display:none">解答を提出する</button>
+          <div class="dots" id="ex-dots"></div>
+          <div class="hint" id="ex-left"></div>
+          <div class="btn-row">
+            <button class="btn btn-ghost" id="btn-prev">前の問題</button>
+            <button class="btn btn-primary" id="btn-next">次の問題</button>
+            <button class="btn btn-accent" id="btn-submit" style="display:none">解答を提出する</button>
+          </div>
         </div>
       </div>
     </div>
@@ -417,10 +396,9 @@ const $   = function(id){ return document.getElementById(id); };
 
 const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
-  caps:null, bioMode:'pending', bioDone:false, bioMethod:'none',
-  bioName:'', bioBirth:'',
-  photoStart:null, camStream:null, consent:false,
-  log:null, rec:null, recStream:null, recBlob:null, recMime:'',
+  caps:null, consent:false, camId:'',
+  composer:null, screenStop:null, recKind:'',
+  log:null, rec:null, camStream:null, recBlob:null, recMime:'',
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
   finished:{},   // langKey -> score
@@ -443,7 +421,6 @@ function checkName(){
   state.nameOk = r.ok; state.name = r.value;
   $('err-name').textContent = $('in-name').value ? r.msg : '';
   $('in-name').classList.toggle('bad', !!$('in-name').value && !r.ok);
-  invalidateBioIfChanged();
   syncStart();
 }
 function checkBirth(){
@@ -451,128 +428,18 @@ function checkBirth(){
   state.birthOk = r.ok; state.birth = r.ok ? r.value : '';
   $('err-birth').textContent = $('in-birth').value ? r.msg : '';
   $('in-birth').classList.toggle('bad', !!$('in-birth').value && !r.ok);
-  invalidateBioIfChanged();
   syncStart();
 }
 
-/* 確認済みの氏名・生年月日が書き換えられたら本人確認をやり直す */
-function invalidateBioIfChanged(){
-  if (!state.bioDone || state.bioMethod === 'none' || state.bioMethod === 'skipped') return;
-  if (state.bioName === state.name && state.bioBirth === state.birth) return;
-  const was = state.bioMethod;
-  state.bioDone = false; state.photoStart = null; state.bioMethod = 'none';
-  $('bio').classList.remove('done');
-  $('bio-ic').innerHTML = BIO_ICON;
-  setupBio();
-  toast('入力が変更されたため、顔写真を撮り直してください');
-}
-function syncStart(){
-  $('btn-start').disabled = !SC.canStart(state) || (needConsent() && !state.consent);
-  gateBio();
-}
 function needConsent(){ return C.RECORD === true; }
-
-/* 本人確認に進める状態か。足りない項目に応じたメッセージを返す */
-function inputsReady(){
-  const n = SC.validateName($('in-name').value);
-  if (!n.ok) return { ok:false, msg: SC.normalizeName($('in-name').value) ? n.msg : '先に氏名を入力してください' };
-  const b = SC.validateBirth($('in-birth').value);
-  if (!b.ok) return { ok:false, msg: $('in-birth').value ? b.msg : '先に生年月日を入力してください' };
-  return { ok:true, msg:'', name:n.value, birth:b.value };
-}
-
-/* 入力が揃うまで撮影ボタンを押せないようにする */
-function gateBio(){
-  const gate = $('bio-gate');
-  if (state.bioDone){ if (gate) gate.textContent = ''; return; }
-  const r = inputsReady();
-  const shot = $('bio-shot');
-  if (shot) shot.disabled = !r.ok;
-  if (gate) gate.textContent = r.ok ? '' : '氏名と生年月日を入力すると本人確認に進めます';
-  if (r.ok && $('bio-err')) $('bio-err').textContent = '';
-}
-
-/* ---- 本人確認 UI ---- */
-async function setupBio(){
-  state.caps = await SC.detectCaps();
-  state.bioMode = SC.resolveBioMode(C.BIOMETRIC_MODE, state.caps);
-  const body = $('bio-body');
-
-  if (state.bioMode === 'off'){
-    $('bio-title').textContent = '本人確認';
-    $('bio-desc').textContent  = 'この端末では本人確認をスキップします';
-    body.innerHTML = '';
-    state.bioDone = true; state.bioMethod = 'none';
-    syncStart(); return;
-  }
-  if (state.bioMode === 'unavailable'){
-    $('bio-title').textContent = '本人確認を利用できません';
-    $('bio-desc').textContent  = state.caps.secure
-      ? 'この端末にはカメラがありません'
-      : 'httpsで開かれていないため利用できません';
-    body.innerHTML = '<button class="btn btn-ghost block" id="bio-skip">確認なしで続ける</button>';
-    $('bio-skip').onclick = function(){
-      state.bioDone = true; state.bioMethod = 'skipped';
-      markBioDone('本人確認なしで続行します'); syncStart();
-    };
-    syncStart(); return;
-  }
-  // photo
-  buildPhotoUI();
-}
-
-const BIO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
-  + '<path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.2-2h8.2l1.2 2h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/>'
-  + '<circle cx="12" cy="13" r="3.6"/></svg>';
-
-function buildPhotoUI(){
-  $('bio-title').textContent = 'カメラで本人確認';
-  $('bio-desc').textContent  = '正面を向いて顔写真を1枚撮影します';
-  $('bio-body').innerHTML =
-    '<video id="cam" playsinline muted></video>' +
-    '<div class="btn-row"><button class="btn btn-primary" id="bio-shot">撮影する</button></div>' +
-    '<div class="err" id="bio-err"></div>';
-  gateBio();
-  SC.openCamera($('cam')).then(function(st){ state.camStream = st; })
-    .catch(function(e){
-      console.error('[SkillCheck] camera failed', e && e.name, e && e.message);
-      $('bio-err').textContent = SC.jaCameraError(e);
-      $('bio-body').insertAdjacentHTML('beforeend',
-        '<button class="btn btn-ghost block" id="bio-skip" style="margin-top:10px">確認なしで続ける</button>');
-      $('bio-skip').onclick = function(){
-        state.bioDone = true; state.bioMethod='skipped';
-        markBioDone('本人確認なしで続行します'); syncStart();
-      };
-    });
-  $('bio-shot').onclick = function(){
-    const ready = inputsReady();
-    if (!ready.ok){ $('bio-err').textContent = ready.msg; return; }
-    try{
-      state.photoStart = SC.snapPhoto($('cam'), 360);
-      SC.closeCamera(state.camStream); state.camStream = null;
-      state.bioDone = true; state.bioMethod = 'photo';
-      state.bioName = ready.name; state.bioBirth = ready.birth;
-      $('bio-body').innerHTML = '<img id="shot" alt="撮影した顔写真" src="'+state.photoStart+'">'
-        + '<div class="btn-row"><button class="btn btn-ghost" id="bio-retake">撮り直す</button></div>';
-      $('bio-retake').onclick = function(){ state.bioDone=false; state.photoStart=null; $('bio').classList.remove('done'); buildPhotoUI(); syncStart(); };
-      markBioDone('顔写真で本人確認しました');
-      syncStart();
-    }catch(e){ $('bio-err').textContent = '撮影に失敗しました'; }
-  };
-}
-
-function markBioDone(msg){
-  $('bio').classList.add('done');
-  $('bio-title').textContent = '本人確認 完了';
-  $('bio-desc').textContent = msg;
-  $('bio-ic').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#0e9f6e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
-  $('bio-gate').textContent = '';
+function syncStart(){
+  $('btn-start').disabled = !SC.canStart(state, needConsent());
 }
 
 /* ================= 言語一覧 ================= */
 function renderLangs(){
   $('pb-name').textContent = state.name;
-  $('pb-bio').textContent  = state.bioMethod === 'photo' ? '本人確認 済（顔写真）' : '本人確認 なし';
+  $('pb-bio').textContent  = (C.RECORD && state.consent) ? '録画あり' : '録画なし';
   const groups = [];
   LANGS.forEach(function(l){
     let g = groups.find(function(x){ return x.name === l.group; });
@@ -609,8 +476,7 @@ async function ensureSession(){
     const row = await SC.saveSession({
       candidate_name: state.name,
       birth_date: state.birth,
-      auth_method: state.bioMethod,
-      photo_start: state.photoStart,
+      consented: !!state.consent,
       user_agent: navigator.userAgent.slice(0,300),
     });
     state.sessionId = row && row.id ? row.id : null;
@@ -729,24 +595,53 @@ async function startExam(key){
   show('screen-exam'); renderQ();
 }
 
-/* ---- 録画（カメラ映像のみ） ---- */
+/* ---- 録画 ----
+   画面は #ex-capture の範囲だけを撮り、模範解答カードは撮影対象から外します。
+   範囲を絞れないブラウザでは画面を撮らず、カメラのみで録画します。 */
 async function startRecording(){
-  state.recBlob = null; state.recMime = '';
-  if (!C.RECORD || !SC.canRecord() || !state.caps.camera){
-    setRecBadge(false, SC.canRecord() ? '録画なし' : '録画非対応');
-    return;
-  }
-  if (!state.consent){ setRecBadge(false, '録画なし'); return; }
+  state.recBlob = null; state.recMime = ''; state.recKind = '';
+  if (!C.RECORD || !state.consent){ setRecBadge(false, '録画なし'); return; }
+  if (!SC.canRecord()){ setRecBadge(false, '録画非対応'); return; }
+
+  // カメラ
+  let cam = null;
   try{
-    state.recStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode:'user', width:{ ideal:C.RECORD_WIDTH }, frameRate:{ ideal:C.RECORD_FPS } },
-      audio: false,
+    cam = await SC.openCameraStream(state.camId, { width: C.RECORD_WIDTH, fps: C.RECORD_FPS });
+    state.camStream = cam;
+  }catch(e){
+    console.error('[SkillCheck] camera failed', e && e.name);
+    state.log.add('cam_fail', { name: e && e.name });
+  }
+
+  // 画面（模範解答を除外できる場合のみ）
+  let screen = null;
+  if (C.RECORD_SCREEN && state.caps.screen !== 'none' && state.caps.screen !== 'unrestricted'){
+    try{
+      screen = await SC.startScreenCapture($('ex-capture'));
+      state.screenStop = screen.stop;
+      state.log.add('screen_on', { mode: screen.mode });
+    }catch(e){
+      console.error('[SkillCheck] screen capture failed', e && e.code, e && e.message);
+      state.log.add('screen_off', { code: e && e.code });
+      if (e && (e.code === 'wrong-surface' || e.code === 'denied')) toast(e.message);
+    }
+  } else if (C.RECORD_SCREEN){
+    state.log.add('screen_off', { code: 'unsupported' });
+  }
+
+  if (!cam && !screen){ setRecBadge(false, '録画できません'); return; }
+
+  try{
+    state.composer = SC.createComposer(screen && screen.stream, cam, {
+      width: C.RECORD_CANVAS_W, height: C.RECORD_CANVAS_H, fps: C.RECORD_FPS,
     });
-    state.rec = SC.createRecorder(state.recStream, { bitrate: C.RECORD_BITRATE });
+    state.composer.start();
+    state.rec = SC.createRecorder(state.composer.stream, { bitrate: C.RECORD_BITRATE });
     state.rec.start();
     state.recMime = state.rec.mime;
-    setRecBadge(true, '録画中');
-    state.log.add('rec_start', { mime: state.rec.mime });
+    state.recKind = screen ? ('画面＋カメラ（' + screen.mode + '）') : 'カメラのみ';
+    setRecBadge(true, screen ? '画面とカメラを録画中' : 'カメラを録画中');
+    state.log.add('rec_start', { mime: state.rec.mime, kind: state.recKind });
   }catch(e){
     console.error('[SkillCheck] recorder failed', e && e.name, e && e.message);
     setRecBadge(false, '録画できません');
@@ -755,11 +650,14 @@ async function startRecording(){
 }
 
 async function stopRecording(){
-  if (!state.rec) return null;
   let blob = null;
-  try{ blob = await state.rec.stop(); }catch(e){ console.error('[SkillCheck] stop failed', e); }
-  SC.closeCamera(state.recStream);
-  state.recStream = null; state.rec = null;
+  if (state.rec){
+    try{ blob = await state.rec.stop(); }catch(e){ console.error('[SkillCheck] stop failed', e); }
+  }
+  if (state.composer) state.composer.stop();
+  if (state.screenStop) state.screenStop();
+  SC.closeCamera(state.camStream);
+  state.rec = null; state.composer = null; state.screenStop = null; state.camStream = null;
   setRecBadge(false, '録画終了');
   return blob;
 }
@@ -780,6 +678,8 @@ function renderQ(){
   $('ex-choices').style.display = isCode ? 'none' : '';
   $('ex-code').style.display = isCode ? '' : 'none';
 
+  $('ex-model-card').style.display = isCode ? '' : 'none';
+  document.querySelector('.exam-grid').classList.toggle('has-model', isCode);
   if (isCode){ renderCodeQ(item); }
   else { renderChoiceQ(item, n); }
   $('ex-dots').innerHTML = state.exam.map(function(q,i){
@@ -817,16 +717,6 @@ async function submitExam(){
 
   const dur = Date.now() - state.startedAt;
   const recBlob = await stopRecording();
-
-  let photoEnd = null;
-  if (C.PHOTO_ON_FINISH && state.bioMethod === 'photo' && state.caps.camera){
-    try{
-      const v = document.createElement('video'); v.playsInline = true; v.muted = true;
-      const st = await SC.openCamera(v);
-      await new Promise(function(r){ setTimeout(r, 700); });
-      photoEnd = SC.snapPhoto(v, 360); SC.closeCamera(st);
-    }catch(e){ /* 撮影できなくても提出は続行 */ }
-  }
 
   // 選択式のみ自動採点。記述式は管理画面での目視レビュー
   const choiceIdx = [];
@@ -870,7 +760,6 @@ async function submitExam(){
       lang_label: state.lang.label,
       total: g.total, correct: g.correct, score: g.score,
       passed: g.passed, rank: g.rank, duration_ms: dur,
-      auth_method: state.bioMethod, reauth_ok: !!photoEnd, photo_end: photoEnd,
       code_total: codeRows.length, review_status: codeRows.length ? 'pending' : 'none',
       video_path: videoPath, video_mime: state.recMime || null,
       video_bytes: recBlob ? recBlob.size : null,
@@ -947,12 +836,46 @@ function renderResult(g, dur, codeRows){
 }
 
 /* ================= 起動 ================= */
-if (needConsent()){
+async function setupRecordingUI(){
+  state.caps = await SC.detectCaps();
+  if (!needConsent()) return;
   $('consent').style.display = '';
-  $('consent-ok').addEventListener('change', function(){
-    state.consent = this.checked; syncStart();
+  $('consent-ok').addEventListener('change', async function(){
+    state.consent = this.checked;
+    syncStart();
+    if (this.checked) await fillCameras();
   });
+  const hint = (state.caps.screen === 'element' || state.caps.screen === 'region')
+    ? '画面と顔を録画します。模範解答は録画に映りません。'
+    : 'このブラウザでは画面を録画できないため、顔のみ録画します。';
+  $('consent').insertAdjacentHTML('beforeend',
+    '<p style="font-size:11.5px;color:var(--muted);margin-top:9px">' + hint + '</p>');
 }
+
+/* 外付けカメラを選べるようにする（許可後でないと名前が取れない） */
+async function fillCameras(){
+  let list = await SC.listCameras();
+  if (list.length && !list[0].label){
+    try{
+      const tmp = await SC.openCameraStream('', {});
+      SC.closeCamera(tmp);
+      list = await SC.listCameras();
+    }catch(e){ /* 許可されなければ既定のカメラを使う */ }
+  }
+  if (list.length < 2){ $('cam-field').style.display = 'none'; return; }
+  const saved = localStorage.getItem('sc_cam') || '';
+  $('in-cam').innerHTML = list.map(function(d){
+    return '<option value="'+esc(d.id)+'"'+(d.id===saved?' selected':'')+'>'+esc(d.label)+'</option>';
+  }).join('');
+  state.camId = saved && list.some(function(d){ return d.id===saved; }) ? saved : list[0].id;
+  $('in-cam').value = state.camId;
+  $('cam-field').style.display = '';
+  $('in-cam').onchange = function(){
+    state.camId = this.value;
+    try{ localStorage.setItem('sc_cam', this.value); }catch(e){}
+  };
+}
+setupRecordingUI();
 $('in-name').addEventListener('input', checkName);
 $('in-birth').addEventListener('input', checkBirth);
 $('in-birth').addEventListener('change', checkBirth);
@@ -967,7 +890,8 @@ $('btn-quit').onclick  = function(){
 };
 $('btn-back').onclick  = function(){ renderLangs(); show('screen-langs'); };
 window.addEventListener('beforeunload', function(){
-  SC.closeCamera(state.camStream); SC.closeCamera(state.recStream);
+  SC.closeCamera(state.camStream);
+  if (state.screenStop) state.screenStop();
 });
 /* 画面を離れた記録（別タブへの移動検知） */
 document.addEventListener('visibilitychange', function(){
@@ -980,7 +904,6 @@ $('note-count').textContent = C.CHOICE_COUNT + C.CODE_COUNT;
 $('in-birth').min = SC.BIRTH_MIN;
 $('in-birth').max = SC.isoDate(new Date());
 document.title = C.APP_TITLE + ' — ' + C.ORG_NAME;
-setupBio();
 })();
 </script>
 </body>

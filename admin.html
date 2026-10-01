@@ -65,13 +65,9 @@ tbody tr:hover{background:#f7faff}
 .pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:800}
 .pill.p{background:#e3f6ee;color:var(--ok)} .pill.f{background:#fdeaea;color:var(--ng)}
 .rk{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--blue-100);color:var(--blue);font-weight:800;font-size:12.5px}
-.thumb{width:34px;height:34px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid var(--line);transform:scaleX(-1)}
 .auth-ic{font-size:11.5px;color:var(--muted);white-space:nowrap}
 .tbl-scroll{overflow:auto;max-height:64vh}
 .empty{padding:44px 20px;text-align:center;color:var(--muted);font-size:13.5px}
-.modal{position:fixed;inset:0;background:rgba(6,16,38,.72);display:none;place-items:center;padding:20px;z-index:40}
-.modal.on{display:grid}
-.modal img{max-width:min(460px,90vw);border-radius:14px;transform:scaleX(-1)}
 .note{color:#9fb4dd;font-size:11.5px;margin-top:16px;text-align:center}
 .pill.r{background:#fff4e0;color:#b4730c}
 .pill.d{background:#eaf0fb;color:#1d4ed8}
@@ -159,18 +155,16 @@ tbody tr:hover{background:#f7faff}
         <table>
           <thead><tr>
             <th>受験日時</th><th>氏名</th><th>生年月日</th><th>言語</th>
-            <th>選択式</th><th>記述式</th><th>所要</th><th>本人確認</th><th>写真</th><th></th>
+            <th>選択式</th><th>記述式</th><th>所要</th><th>録画</th><th></th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
         <div class="empty" id="empty" style="display:none">該当する受験記録はありません。</div>
       </div>
     </div></div>
-    <p class="note">顔写真・生年月日は個人情報です。取り扱いにご注意ください。</p>
+    <p class="note">録画・生年月日は個人情報です。取り扱いにご注意ください。</p>
   </section>
 </div>
-
-<div class="modal" id="modal"><img id="modal-img" alt="受験者の顔写真"></div>
 
 <div class="panel" id="panel" role="dialog" aria-modal="true" aria-label="記述解答の審査">
   <div class="panel-in">
@@ -300,13 +294,6 @@ function fmtDate(s){
   return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
 }
 function fmtDur(ms){ const s=Math.round((ms||0)/1000); return Math.floor(s/60)+'分'+String(s%60).padStart(2,'0')+'秒'; }
-const AUTH_JA = { photo:'顔写真', skipped:'なし', none:'なし' };
-function authLabel(r){
-  const base = AUTH_JA[r.auth_method] || '—';
-  if (r.auth_method === 'photo') return base + (r.photo_end ? '／提出時も撮影' : '／開始時のみ');
-  return base;
-}
-
 function reviewCell(r){
   if (!r.code_total) return '<span style="color:#5f6f92">—</span>';
   if (r.review_status === 'done')
@@ -334,14 +321,10 @@ function render(){
         + '<span class="pill '+(r.passed?'p':'f')+'">'+(r.passed?'合格':'不合格')+'</span></td>' +
       '<td>'+reviewCell(r)+'</td>' +
       '<td>'+fmtDur(r.duration_ms)+'</td>' +
-      '<td class="auth-ic">'+esc(authLabel(r))+'</td>' +
-      '<td>'+(r.photo_end?'<img class="thumb" src="'+r.photo_end+'" alt="提出時の顔写真">':'—')+'</td>' +
+      '<td class="auth-ic">'+(r.video_path?('あり'+(r.video_bytes?' '+Math.round(r.video_bytes/1024/1024*10)/10+'MB':'')):'なし')+'</td>' +
       '<td><button class="linkish" data-open="'+esc(r.id)+'">'+(r.code_total?'審査する':'詳細')+'</button></td>' +
     '</tr>';
   }).join('');
-  Array.prototype.forEach.call($('rows').querySelectorAll('.thumb'), function(img){
-    img.onclick = function(){ $('modal-img').src = img.src; $('modal').classList.add('on'); };
-  });
   Array.prototype.forEach.call($('rows').querySelectorAll('[data-open]'), function(b){
     b.onclick = function(){ openPanel(b.dataset.open); };
   });
@@ -575,7 +558,6 @@ $('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') login(); })
 $('btn-csv').onclick = toCsv;
 $('btn-reload').onclick = load;
 $('btn-logout').onclick = function(){ sessionStorage.removeItem('sc_admin_token'); token=''; rows=[]; show('s-login'); };
-$('modal').onclick = function(){ $('modal').classList.remove('on'); };
 
 if (!C.SUPABASE_URL){
   $('login-err').textContent = 'config.js に Supabase の URL と anon key を設定してください。';

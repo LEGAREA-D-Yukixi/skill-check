@@ -190,17 +190,12 @@
      本人確認の方式決定
      --------------------------------------------------------- */
 
-  function resolveBioMode(configMode, caps) {
-    const c = caps || {};
-    if (configMode === 'off') return 'off';
-    return c.camera ? 'photo' : 'unavailable';
-  }
-
-  function canStart(state) {
+  // 受験を開始できるか。録画する設定なら同意が必要
+  function canStart(state, needConsent) {
     const s = state || {};
     if (!s.nameOk || !s.birthOk) return false;
-    if (s.bioMode === 'off') return true;
-    return !!s.bioDone;
+    if (needConsent === false) return true;
+    return !!s.consent;
   }
 
   /* ---------------------------------------------------------
@@ -246,102 +241,12 @@
     return 'ログインできませんでした';
   }
 
-  const api = {
-    normalizeName: normalizeName,
-    jaCameraError: jaCameraError,
-    jaHttpError: jaHttpError,
-    jaAuthError: jaAuthError,
-    validateName: validateName,
-    validateBirth: validateBirth,
-    BIRTH_MIN: BIRTH_MIN,
-    ageAt: ageAt,
-    isoDate: isoDate,
-    mulberry32: mulberry32,
-    shuffle: shuffle,
-    buildExam: buildExam,
-    gradeExam: gradeExam,
-    scoreOf: scoreOf,
-    rankOf: rankOf,
-    unanswered: unanswered,
-    progressText: progressText,
-    formatDuration: formatDuration,
-    resolveBioMode: resolveBioMode,
-    canStart: canStart,
-    normalizeCode: normalizeCode,
-    codeMatch: codeMatch,
-    codeVerdict: codeVerdict,
-  };
-
-  /* =========================================================
-     ここから下はブラウザ専用（本人確認・保存）
-     ========================================================= */
-  if (typeof window === 'undefined') return api;
-
-  const cfg = function () { return window.SC_CONFIG || {}; };
-
-  /* ---- バイト列 <-> base64url ---- */
-  function bufToB64url(buf) {
-    const bytes = new Uint8Array(buf);
-    let s = '';
-    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function b64urlToBuf(str) {
-    const s = str.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = s.length % 4 ? '===='.slice(s.length % 4) : '';
-    const bin = atob(s + pad);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-  function randomBytes(n) {
-    const a = new Uint8Array(n);
-    crypto.getRandomValues(a);
-    return a;
-  }
-
-  /* ---- 端末が何に対応しているか ---- */
-  async function detectCaps() {
-    const caps = { camera: false, secure: !!window.isSecureContext };
-    try {
-      caps.camera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    } catch (e) { caps.camera = false; }
-    if (!caps.secure) caps.camera = false;
-    return caps;
-  }
-
-  /* ---- カメラ ---- */
-  async function openCamera(videoEl) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: false,
-    });
-    videoEl.srcObject = stream;
-    await videoEl.play();
-    return stream;
-  }
-  function closeCamera(stream) {
-    if (!stream) return;
-    stream.getTracks().forEach(function (t) { t.stop(); });
-  }
-  function snapPhoto(videoEl, maxW) {
-    const w = maxW || 360;
-    const vw = videoEl.videoWidth || 640;
-    const vh = videoEl.videoHeight || 480;
-    const scale = Math.min(1, w / vw);
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(vw * scale);
-    cv.height = Math.round(vh * scale);
-    cv.getContext('2d').drawImage(videoEl, 0, 0, cv.width, cv.height);
-    return cv.toDataURL('image/jpeg', 0.7);
-  }
-
   /* ---------------------------------------------------------
      記述問題（写経）の照合
      採点は管理画面での目視ですが、一致率を参考値として添えます
      --------------------------------------------------------- */
 
-  // 行末の空白と空行を整え、インデントは保ったまま比較できる形にする
+  // 行末の空白と余分な空行を整え、インデントは保ったまま比較できる形にする
   function normalizeCode(src) {
     return String(src == null ? '' : src)
       .replace(/\r\n?/g, '\n')
@@ -352,9 +257,9 @@
       .trim();
   }
 
-  // 空白をすべて畳んだ比較用の形（インデント差を無視する）
+  // 空白を畳んだ比較用の形（インデント差を無視する）
   function squashCode(src) {
-    return normalizeCode(src).replace(/[ \t]+/g, ' ').replace(/\n/g, '\n');
+    return normalizeCode(src).replace(/[ \t]+/g, ' ');
   }
 
   // 0-100 の一致率。完全一致は100
@@ -391,6 +296,82 @@
     return '要確認';
   }
 
+  const api = {
+    normalizeName: normalizeName,
+    jaCameraError: jaCameraError,
+    jaHttpError: jaHttpError,
+    jaAuthError: jaAuthError,
+    validateName: validateName,
+    validateBirth: validateBirth,
+    BIRTH_MIN: BIRTH_MIN,
+    ageAt: ageAt,
+    isoDate: isoDate,
+    mulberry32: mulberry32,
+    shuffle: shuffle,
+    buildExam: buildExam,
+    gradeExam: gradeExam,
+    scoreOf: scoreOf,
+    rankOf: rankOf,
+    unanswered: unanswered,
+    progressText: progressText,
+    formatDuration: formatDuration,
+    canStart: canStart,
+    normalizeCode: normalizeCode,
+    codeMatch: codeMatch,
+    codeVerdict: codeVerdict,
+  };
+
+  /* =========================================================
+     ここから下はブラウザ専用（本人確認・保存）
+     ========================================================= */
+  if (typeof window === 'undefined') return api;
+
+  const cfg = function () { return window.SC_CONFIG || {}; };
+
+  /* ---- バイト列 <-> base64url ---- */
+  function bufToB64url(buf) {
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlToBuf(str) {
+    const s = str.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = s.length % 4 ? '===='.slice(s.length % 4) : '';
+    const bin = atob(s + pad);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function randomBytes(n) {
+    const a = new Uint8Array(n);
+    crypto.getRandomValues(a);
+    return a;
+  }
+
+  /* ---- 端末が何に対応しているか ---- */
+  async function detectCaps() {
+    const caps = {
+      camera: false,
+      secure: typeof window !== 'undefined' ? !!window.isSecureContext : false,
+      recorder: false,
+      screen: 'none',
+    };
+    try {
+      caps.camera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    } catch (e) { caps.camera = false; }
+    if (!caps.secure) caps.camera = false;
+    caps.recorder = canRecord();
+    caps.screen = caps.secure ? screenCaptureSupport() : 'none';
+    return caps;
+  }
+
+  /* ---- カメラの停止（録画・プレビュー共通） ---- */
+  function closeCamera(stream) {
+    if (!stream) return;
+    stream.getTracks().forEach(function (t) { t.stop(); });
+  }
+
   /* =========================================================
      録画（カメラ映像のみ）
      画面は撮らず、代わりに操作ログを記録します。
@@ -414,6 +395,157 @@
 
   function canRecord() {
     return typeof MediaRecorder !== 'undefined' && !!pickMime();
+  }
+
+  /* ---- 接続されているカメラの一覧（外付けカメラの選択用） ---- */
+  async function listCameras() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+      const all = await navigator.mediaDevices.enumerateDevices();
+      return all.filter(function (d) { return d.kind === 'videoinput'; })
+                .map(function (d, i) {
+                  return { id: d.deviceId, label: d.label || ('カメラ ' + (i + 1)) };
+                });
+    } catch (e) { return []; }
+  }
+
+  async function openCameraStream(deviceId, opts) {
+    const o = opts || {};
+    const video = { width: { ideal: o.width || 320 }, frameRate: { ideal: o.fps || 10 } };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    else video.facingMode = 'user';
+    return await navigator.mediaDevices.getUserMedia({ video: video, audio: false });
+  }
+
+  /* =========================================================
+     画面録画（模範解答を映さない）
+
+     getDisplayMedia はタブ全体を撮るため、そのままでは模範解答も写ります。
+     そこで「このタブ」を選ばせたうえで、撮影範囲を解答エリアだけに絞ります。
+
+       Element Capture (restrictTo) … 指定要素の配下だけを撮る。Chrome 132+
+       Region Capture  (cropTo)     … 指定要素の矩形で切り抜く。Chrome 104+
+
+     どちらも使えない場合は画面録画を行いません（模範解答が漏れるため）。
+     ========================================================= */
+
+  function tagged(msg, code) {
+    const e = new Error(msg);
+    e.code = code;
+    return e;
+  }
+
+  function screenCaptureSupport() {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices ||
+        !navigator.mediaDevices.getDisplayMedia) return 'none';
+    const proto = (typeof MediaStreamTrack !== 'undefined' &&
+                   window.BrowserCaptureMediaStreamTrack &&
+                   window.BrowserCaptureMediaStreamTrack.prototype) || null;
+    if (window.RestrictionTarget && proto && proto.restrictTo) return 'element';
+    if (window.CropTarget && proto && proto.cropTo) return 'region';
+    if (window.RestrictionTarget) return 'element';
+    if (window.CropTarget) return 'region';
+    return 'unrestricted';
+  }
+
+  // el : 録画してよい領域のルート要素（模範解答はこの外側に置くこと）
+  async function startScreenCapture(el) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      throw tagged('このブラウザは画面録画に対応していません', 'unsupported');
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser', frameRate: { ideal: 8 } },
+        audio: false,
+        preferCurrentTab: true,
+        selfBrowserSurface: 'include',
+        surfaceSwitching: 'exclude',
+        systemAudio: 'exclude',
+      });
+    } catch (e) {
+      throw tagged('画面の共有が許可されませんでした', 'denied');
+    }
+    const track = stream.getVideoTracks()[0];
+    const stop = function () { stream.getTracks().forEach(function (t) { t.stop(); }); };
+
+    // タブ以外（画面全体・ウィンドウ）を選ばれた場合は範囲を絞れない
+    const surface = (track.getSettings && track.getSettings().displaySurface) || '';
+    if (surface !== 'browser') {
+      stop();
+      throw tagged('共有の選択で「このタブ」を選んでください', 'wrong-surface');
+    }
+
+    let mode = '';
+    try {
+      if (window.RestrictionTarget && track.restrictTo) {
+        await track.restrictTo(await window.RestrictionTarget.fromElement(el));
+        mode = 'element';
+      } else if (window.CropTarget && track.cropTo) {
+        await track.cropTo(await window.CropTarget.fromElement(el));
+        mode = 'region';
+      }
+    } catch (e) { mode = ''; }
+
+    if (!mode) {
+      stop();
+      throw tagged('このブラウザでは模範解答を録画から除外できません', 'no-restrict');
+    }
+    return { stream: stream, mode: mode, stop: stop };
+  }
+
+  /* ---- 画面とカメラを1本の映像に合成する ---- */
+  function videoFrom(stream) {
+    const v = document.createElement('video');
+    v.srcObject = stream; v.muted = true; v.playsInline = true;
+    const p = v.play();
+    if (p && p.catch) p.catch(function () {});
+    return v;
+  }
+
+  function createComposer(screenStream, camStream, opts) {
+    const o = opts || {};
+    const w = o.width || 720, h = o.height || 450, fps = o.fps || 5;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    const sv = screenStream ? videoFrom(screenStream) : null;
+    const cvid = camStream ? videoFrom(camStream) : null;
+    let timer = null;
+
+    function drawContain(video) {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) return;
+      const s = Math.min(w / vw, h / vh);
+      const dw = vw * s, dh = vh * s;
+      ctx.drawImage(video, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    }
+    function draw() {
+      ctx.fillStyle = '#0b1730';
+      ctx.fillRect(0, 0, w, h);
+      if (sv) drawContain(sv);
+      if (cvid && cvid.videoWidth) {
+        const cw = Math.round(w * 0.22), ch = Math.round(cw * 0.75);
+        const x = w - cw - 10, y = h - ch - 10;
+        ctx.save();
+        ctx.translate(x + cw, y); ctx.scale(-1, 1);   // 鏡像で描画
+        ctx.drawImage(cvid, 0, 0, cw, ch);
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(255,255,255,.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, cw, ch);
+      }
+    }
+    return {
+      stream: cv.captureStream(fps),
+      start: function () { draw(); timer = setInterval(draw, Math.round(1000 / fps)); },
+      stop: function () {
+        if (timer) clearInterval(timer);
+        timer = null;
+        if (sv) sv.srcObject = null;
+        if (cvid) cvid.srcObject = null;
+      },
+    };
   }
 
   function extFor(mime) {
@@ -591,9 +723,7 @@
 
   Object.assign(api, {
     detectCaps: detectCaps,
-    openCamera: openCamera,
     closeCamera: closeCamera,
-    snapPhoto: snapPhoto,
     sbReady: sbReady,
     newId: newId,
     saveSession: saveSession,
@@ -602,6 +732,11 @@
     saveLog: saveLog,
     canRecord: canRecord,
     pickMime: pickMime,
+    listCameras: listCameras,
+    openCameraStream: openCameraStream,
+    screenCaptureSupport: screenCaptureSupport,
+    startScreenCapture: startScreenCapture,
+    createComposer: createComposer,
     extFor: extFor,
     createRecorder: createRecorder,
     createLogger: createLogger,

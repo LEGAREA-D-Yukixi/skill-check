@@ -19,19 +19,17 @@ window.SC_CONFIG = {
   SHOW_EXPLANATION: true,  // 結果画面で解説を表示
 
   /* ---- 録画 ----
-     カメラ映像と操作ログを記録します。画面そのものは録画しません。
-     模範解答は映像にもログにも記録されません。 */
+     画面（解答エリアのみ）とカメラ映像を1本に合成して記録します。
+     模範解答カードは撮影対象の外に置いてあるため録画に映りません。
+     画面の撮影範囲を絞れないブラウザでは、画面を撮らずカメラのみ録画します。 */
   RECORD: true,
-  RECORD_BITRATE: 150000,  // 映像のビットレート（約1MB/分）
-  RECORD_WIDTH: 320,       // 録画解像度の目安
-  RECORD_FPS: 10,
+  RECORD_SCREEN: true,     // 画面も録画する（Chrome / Edge のみ対応）
+  RECORD_BITRATE: 180000,  // 合成映像のビットレート（約1.4MB/分）
+  RECORD_CANVAS_W: 720,    // 録画する映像の幅
+  RECORD_CANVAS_H: 450,
+  RECORD_WIDTH: 320,       // カメラ側の取得解像度
+  RECORD_FPS: 5,
   RECORDING_BUCKET: 'sc-recordings',
-
-  /* ---- 本人確認 ----
-     'photo'（既定）: カメラで顔写真を撮影する
-     'off'          : 本人確認なし */
-  BIOMETRIC_MODE: 'photo',
-  PHOTO_ON_FINISH: true,   // 提出時にも顔写真を撮る（替え玉対策）
 
   /* ---- 表示 ---- */
   ORG_NAME: '株式会社LEGAREA',
