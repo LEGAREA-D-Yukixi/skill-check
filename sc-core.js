@@ -267,6 +267,9 @@
     formatDuration: formatDuration,
     resolveBioMode: resolveBioMode,
     canStart: canStart,
+    normalizeCode: normalizeCode,
+    codeMatch: codeMatch,
+    codeVerdict: codeVerdict,
   };
 
   /* =========================================================
@@ -331,6 +334,175 @@
     cv.height = Math.round(vh * scale);
     cv.getContext('2d').drawImage(videoEl, 0, 0, cv.width, cv.height);
     return cv.toDataURL('image/jpeg', 0.7);
+  }
+
+  /* ---------------------------------------------------------
+     記述問題（写経）の照合
+     採点は管理画面での目視ですが、一致率を参考値として添えます
+     --------------------------------------------------------- */
+
+  // 行末の空白と空行を整え、インデントは保ったまま比較できる形にする
+  function normalizeCode(src) {
+    return String(src == null ? '' : src)
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map(function (line) { return line.replace(/[ \t]+$/, ''); })
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  // 空白をすべて畳んだ比較用の形（インデント差を無視する）
+  function squashCode(src) {
+    return normalizeCode(src).replace(/[ \t]+/g, ' ').replace(/\n/g, '\n');
+  }
+
+  // 0-100 の一致率。完全一致は100
+  function codeMatch(submitted, answer) {
+    const a = normalizeCode(submitted);
+    const b = normalizeCode(answer);
+    if (!b) return 0;
+    if (a === b) return 100;
+    const sa = squashCode(a), sb = squashCode(b);
+    if (sa === sb) return 98;          // インデントのみ相違
+    return Math.round(similarity(sa, sb) * 97);
+  }
+
+  // 行単位の最長共通部分列から類似度を出す
+  function similarity(a, b) {
+    const x = a.split('\n'), y = b.split('\n');
+    if (!x.length || !y.length) return 0;
+    let prev = new Array(y.length + 1).fill(0);
+    for (let i = 1; i <= x.length; i++) {
+      const cur = new Array(y.length + 1).fill(0);
+      for (let j = 1; j <= y.length; j++) {
+        cur[j] = x[i - 1] === y[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
+      }
+      prev = cur;
+    }
+    return (2 * prev[y.length]) / (x.length + y.length);
+  }
+
+  function codeVerdict(pct) {
+    if (pct >= 100) return '完全一致';
+    if (pct >= 98) return 'インデントのみ相違';
+    if (pct >= 80) return 'ほぼ一致';
+    if (pct >= 40) return '一部一致';
+    return '要確認';
+  }
+
+  /* =========================================================
+     録画（カメラ映像のみ）
+     画面は撮らず、代わりに操作ログを記録します。
+     模範解答はログにも映像にも一切入りません。
+     ========================================================= */
+
+  function pickMime() {
+    const list = [
+      'video/webm;codecs=vp8',
+      'video/webm',
+      'video/mp4;codecs=avc1',   // Safari
+      'video/mp4',
+    ];
+    if (typeof MediaRecorder === 'undefined') return '';
+    if (!MediaRecorder.isTypeSupported) return 'video/mp4';
+    for (let i = 0; i < list.length; i++) {
+      if (MediaRecorder.isTypeSupported(list[i])) return list[i];
+    }
+    return '';
+  }
+
+  function canRecord() {
+    return typeof MediaRecorder !== 'undefined' && !!pickMime();
+  }
+
+  function extFor(mime) {
+    return /mp4/.test(mime || '') ? 'mp4' : 'webm';
+  }
+
+  function createRecorder(stream, opts) {
+    const o = opts || {};
+    const mime = pickMime();
+    if (!mime) throw new Error('この端末では録画できません');
+    const rec = new MediaRecorder(stream, {
+      mimeType: mime,
+      videoBitsPerSecond: o.bitrate || 150000,   // 低ビットレートで容量を抑える
+    });
+    const chunks = [];
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    return {
+      mime: mime,
+      start: function () { rec.start(2000); },
+      stop: function () {
+        return new Promise(function (resolve) {
+          if (rec.state === 'inactive') { resolve(new Blob(chunks, { type: mime })); return; }
+          rec.onstop = function () { resolve(new Blob(chunks, { type: mime })); };
+          rec.stop();
+        });
+      },
+      state: function () { return rec.state; },
+    };
+  }
+
+  /* ---- 操作ログ ----
+     記録するのは「受験者が何をしたか」だけです。
+     模範解答の本文は渡されず、記録もされません。 */
+  function createLogger() {
+    const events = [];
+    const t0 = Date.now();
+    let last = '';
+    return {
+      startedAt: new Date(t0).toISOString(),
+      // type: open / choice / code / paste / blur / focus / submit
+      add: function (type, data) {
+        const e = Object.assign({ t: Date.now() - t0, type: type }, data || {});
+        events.push(e);
+        return e;
+      },
+      // コード編集はスナップショットで記録（同じ内容は捨てる）
+      snapshot: function (qid, text) {
+        const v = String(text == null ? '' : text);
+        if (v === last) return null;
+        last = v;
+        return this.add('code', { qid: qid, v: v });
+      },
+      resetSnapshot: function () { last = ''; },
+      count: function () { return events.length; },
+      bytes: function () { return JSON.stringify(events).length; },
+      dump: function () { return events.slice(); },
+    };
+  }
+
+  /* ---- Supabase Storage へのアップロード ---- */
+  async function uploadRecording(blob, path) {
+    const c = cfg();
+    const base = String(c.SUPABASE_URL).replace(/\/+$/, '');
+    const bucket = c.RECORDING_BUCKET || 'sc-recordings';
+    let res;
+    try {
+      res = await fetch(base + '/storage/v1/object/' + bucket + '/' + path, {
+        method: 'POST',
+        headers: {
+          'apikey': c.SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + c.SUPABASE_ANON_KEY,
+          'Content-Type': blob.type || 'application/octet-stream',
+          'x-upsert': 'true',
+        },
+        body: blob,
+      });
+    } catch (e) {
+      const err = new Error('ネットワークに接続できません');
+      err.status = 0;
+      throw err;
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(function () { return ''; });
+      const err = new Error(jaHttpError(res.status));
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return bucket + '/' + path;
   }
 
   /* ---- Supabase（未設定なら localStorage にフォールバック） ---- */
@@ -400,6 +572,23 @@
     return localPush('sc_results', Object.assign({ created_at: new Date().toISOString() }, full));
   }
 
+  // 記述問題の解答（複数件をまとめて1回でINSERT）
+  async function saveCodeAnswers(rows) {
+    const full = rows.map(function (r) { return Object.assign({ id: newId() }, r); });
+    if (!full.length) return [];
+    if (sbReady()) { await sbInsert('sc_code_answers', full); return full; }
+    full.forEach(function (r) {
+      localPush('sc_code_answers', Object.assign({ created_at: new Date().toISOString() }, r));
+    });
+    return full;
+  }
+
+  async function saveLog(row) {
+    const full = Object.assign({ id: newId() }, row);
+    if (sbReady()) { await sbInsert('sc_logs', full); return full; }
+    return localPush('sc_logs', Object.assign({ created_at: new Date().toISOString() }, full));
+  }
+
   Object.assign(api, {
     detectCaps: detectCaps,
     openCamera: openCamera,
@@ -409,6 +598,14 @@
     newId: newId,
     saveSession: saveSession,
     saveResult: saveResult,
+    saveCodeAnswers: saveCodeAnswers,
+    saveLog: saveLog,
+    canRecord: canRecord,
+    pickMime: pickMime,
+    extFor: extFor,
+    createRecorder: createRecorder,
+    createLogger: createLogger,
+    uploadRecording: uploadRecording,
     bufToB64url: bufToB64url,
     b64urlToBuf: b64urlToBuf,
   });

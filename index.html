@@ -175,6 +175,59 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 .dot.cur{border-color:var(--orange);box-shadow:0 0 0 3px rgba(245,158,11,.22)}
 .hint{color:var(--muted);font-size:12.5px;margin-top:12px;min-height:1em}
 
+/* ===== 記述問題（写経） ===== */
+.code-wrap{margin-top:18px}
+.code-task{
+  background:#fff8e8;border:1.5px solid #f3d79a;border-radius:11px;
+  padding:13px 15px;font-size:14px;color:#6b4e12;
+}
+.code-panel{margin-top:14px}
+.code-label{
+  font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px;
+  display:flex;align-items:center;gap:10px;
+}
+.code-state{margin-left:auto;font-weight:700;font-size:11.5px;color:var(--blue)}
+.code-state.done{color:var(--ok)}
+.code-box,.code-edit{
+  font-family:"SFMono-Regular",Menlo,Consolas,"Noto Sans Mono CJK JP",monospace;
+  font-size:13.5px;line-height:1.72;tab-size:4;
+  border-radius:11px;padding:14px 16px;width:100%;
+  white-space:pre;overflow:auto;
+}
+.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:230px}
+.code-edit{
+  background:#fbfcfe;border:1.5px solid var(--line);color:var(--ink);
+  min-height:180px;resize:vertical;display:block;
+}
+.code-edit:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12);background:#fff}
+.model{position:relative}
+.model::after{
+  content:"録画されません";position:absolute;right:10px;top:0;
+  font-size:10.5px;font-weight:700;color:#8a6d1f;background:#fdf1d4;
+  border:1px solid #f0d49a;border-radius:999px;padding:2px 9px;
+}
+
+/* ===== 録画インジケータ ===== */
+.rec{
+  display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;
+  color:#fff;background:rgba(224,36,36,.9);border-radius:999px;padding:4px 11px;
+}
+.rec i{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.rec.off{background:rgba(255,255,255,.18)}
+.rec.off i{animation:none;opacity:.6}
+
+/* ===== 録画の同意 ===== */
+.consent{
+  margin-top:20px;border:1.5px solid var(--line);border-radius:14px;
+  background:#f8fafd;padding:16px;
+}
+.consent h4{font-size:13.5px;margin-bottom:8px}
+.consent ul{margin:0 0 12px 18px;font-size:12.5px;color:var(--muted)}
+.consent li{margin-top:4px}
+.consent label{display:flex;gap:10px;align-items:flex-start;font-size:13px;cursor:pointer}
+.consent input{margin-top:3px;width:17px;height:17px;flex:none;accent-color:var(--blue)}
+
 /* ===== 結果 ===== */
 .score-hero{
   padding:30px 24px;text-align:center;color:#fff;
@@ -256,6 +309,16 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
         <div class="bio-gate" id="bio-gate"></div>
       </div>
 
+      <div class="consent" id="consent" style="display:none">
+        <h4>受験中の記録について</h4>
+        <ul>
+          <li>受験中はカメラ映像を録画し、操作の記録（解答の変更履歴）を残します</li>
+          <li>画面そのものは録画しません。模範解答は記録に残りません</li>
+          <li>記録は採用選考の確認のみに使用し、目的外では利用しません</li>
+        </ul>
+        <label><input type="checkbox" id="consent-ok"><span>上記に同意して受験します</span></label>
+      </div>
+
       <div class="btn-row">
         <button class="btn btn-primary block" id="btn-start" disabled>試験一覧へ進む</button>
       </div>
@@ -270,7 +333,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
       <div class="badge-ok" id="pb-bio">本人確認 済</div>
     </div>
     <div id="lang-groups"></div>
-    <p class="note">受験したい言語をタップしてください。1言語あたり<span id="note-count">10</span>問・所要5分程度です。<br>同じ言語を何度でも受け直せますが、記録はすべて残ります。</p>
+    <p class="note">受験したい言語をタップしてください。1言語あたり<span id="note-count">10</span>問・所要15分程度です。<br>記述問題は模範解答を見ながら入力する形式です。同じ言語を何度でも受け直せますが、記録はすべて残ります。</p>
   </section>
 
   <!-- ============ 3. テスト ============ -->
@@ -278,13 +341,35 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
     <div class="card">
       <div class="exam-head">
         <div><div class="lng" id="ex-lang">—</div><div class="cnt" id="ex-cnt">1 / 10</div></div>
-        <button class="btn btn-ghost" id="btn-quit" style="padding:9px 15px;font-size:13px">中断</button>
+        <div style="display:flex;align-items:center;gap:11px">
+          <span class="rec off" id="ex-rec"><i></i><span id="ex-rec-txt">録画なし</span></span>
+          <button class="btn btn-ghost" id="btn-quit" style="padding:9px 15px;font-size:13px">中断</button>
+        </div>
       </div>
       <div class="bar"><i id="ex-bar" style="width:0%"></i></div>
       <div class="pad">
         <div class="qno" id="ex-qno">Q1</div>
         <div class="qtext" id="ex-q">—</div>
         <div class="choices" id="ex-choices"></div>
+
+        <div class="code-wrap" id="ex-code" style="display:none">
+          <div class="code-task" id="ex-task"></div>
+          <div class="code-panel model" data-norec="1">
+            <div class="code-label">模範解答（このまま入力してください）</div>
+            <pre class="code-box" id="ex-model"></pre>
+          </div>
+          <div class="code-panel">
+            <div class="code-label">解答欄
+              <span class="code-state" id="ex-cstate"></span>
+            </div>
+            <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
+                      autocomplete="off" autocorrect="off" wrap="off"></textarea>
+          </div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn btn-ghost" id="btn-reset-code" style="flex:0 0 auto">元のコードに戻す</button>
+          </div>
+        </div>
+
         <div class="dots" id="ex-dots"></div>
         <div class="hint" id="ex-left"></div>
         <div class="btn-row">
@@ -320,6 +405,7 @@ img#shot{width:100%;max-width:300px;border-radius:12px;display:block;transform:s
 
 <script src="config.js"></script>
 <script src="sc-questions.js"></script>
+<script src="sc-code.js"></script>
 <script src="sc-core.js"></script>
 <script>
 (function(){
@@ -333,7 +419,8 @@ const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
   caps:null, bioMode:'pending', bioDone:false, bioMethod:'none',
   bioName:'', bioBirth:'',
-  photoStart:null, camStream:null,
+  photoStart:null, camStream:null, consent:false,
+  log:null, rec:null, recStream:null, recBlob:null, recMime:'',
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
   finished:{},   // langKey -> score
@@ -380,9 +467,10 @@ function invalidateBioIfChanged(){
   toast('入力が変更されたため、顔写真を撮り直してください');
 }
 function syncStart(){
-  $('btn-start').disabled = !SC.canStart(state);
+  $('btn-start').disabled = !SC.canStart(state) || (needConsent() && !state.consent);
   gateBio();
 }
+function needConsent(){ return C.RECORD === true; }
 
 /* 本人確認に進める状態か。足りない項目に応じたメッセージを返す */
 function inputsReady(){
@@ -495,13 +583,16 @@ function renderLangs(){
     return '<div class="group"><h3>'+esc(g.name)+'</h3><div class="lang-grid">' +
       g.items.map(function(l){
         const pool = Q[l.key] || [];
-        const n = (!C.QUESTION_COUNT || C.QUESTION_COUNT<=0) ? pool.length : Math.min(C.QUESTION_COUNT, pool.length);
+        const cpool = (window.SC_CODE && window.SC_CODE[l.key]) || [];
+        const nc = Math.min(C.CHOICE_COUNT, pool.length);
+        const nw = Math.min(C.CODE_COUNT, cpool.length);
+        const n = nc + nw;
         const sc = state.finished[l.key];
         return '<button class="lang'+(sc!=null?' done':'')+'" data-k="'+l.key+'">' +
           (sc!=null ? '<span class="score">'+sc+'点</span>' : '') +
           '<span class="tag">'+esc(l.tag)+'</span>' +
           '<span class="nm">'+esc(l.label)+'</span>' +
-          '<span class="sub">全'+n+'問 / 選択式</span>' +
+          '<span class="sub">全'+n+'問（選択'+nc+' / 記述'+nw+'）</span>' +
           '<span class="go">›</span></button>';
       }).join('') + '</div></div>';
   }).join('');
@@ -530,30 +621,8 @@ async function ensureSession(){
   }
 }
 
-function startExam(key){
-  const lang = LANGS.find(function(l){ return l.key === key; });
-  const pool = Q[key];
-  if (!pool || !pool.length){ toast('この言語の問題はまだ登録されていません'); return; }
-  state.lang = lang;
-  state.exam = SC.buildExam(key, pool, {
-    count: C.QUESTION_COUNT,
-    shuffleQuestions: C.SHUFFLE_QUESTIONS,
-    shuffleChoices: C.SHUFFLE_CHOICES,
-  });
-  state.answers = new Array(state.exam.length).fill(null);
-  state.cur = 0; state.startedAt = Date.now();
-  ensureSession();
-  $('ex-lang').textContent = lang.label;
-  show('screen-exam'); renderQ();
-}
-
-function renderQ(){
-  const item = state.exam[state.cur];
-  const n = state.exam.length;
-  $('ex-cnt').textContent = (state.cur+1) + ' / ' + n;
-  $('ex-bar').style.width = Math.round(((state.cur+1)/n)*100) + '%';
-  $('ex-qno').textContent = 'Q' + (state.cur+1);
-  $('ex-q').textContent = item.q;
+/* ---- 選択式の描画 ---- */
+function renderChoiceQ(item, n){
   $('ex-choices').innerHTML = item.choices.map(function(t,i){
     const sel = state.answers[state.cur] === i;
     return '<button class="choice'+(sel?' sel':'')+'" data-i="'+i+'">' +
@@ -563,21 +632,172 @@ function renderQ(){
     b.onclick = function(){
       const first = state.answers[state.cur] == null;   // 初回回答のときだけ自動で次へ
       state.answers[state.cur] = +b.dataset.i;
+      state.log.add('choice', { qid:item.qid, i:+b.dataset.i });
       renderQ();
       if (first && state.cur < n-1) setTimeout(function(){ state.cur++; renderQ(); }, 200);
     };
   });
-  $('ex-dots').innerHTML = state.exam.map(function(_,i){
-    return '<button class="dot'+(state.answers[i]!=null?' answered':'')+(i===state.cur?' cur':'')+'" data-i="'+i+'">'+(i+1)+'</button>';
+}
+
+/* ---- 記述式（写経）の描画 ----
+   模範解答は画面に出しますが、操作ログには一切渡しません。 */
+function renderCodeQ(item){
+  $('ex-task').textContent = item.task;
+  $('ex-model').textContent = item.answer;     // 表示のみ。data-norec の領域
+  const ed = $('ex-edit');
+  ed.value = state.answers[state.cur] == null ? item.code : state.answers[state.cur];
+  ed.oninput = null;
+  updateCodeState(item);
+  state.log.resetSnapshot();
+  ed.oninput = function(){
+    state.answers[state.cur] = ed.value;
+    state.log.snapshot(item.qid, ed.value);
+    updateCodeState(item);
+    refreshDots();
+  };
+  ed.onpaste = function(){ state.log.add('paste', { qid:item.qid }); };
+  $('btn-reset-code').onclick = function(){
+    ed.value = item.code;
+    state.answers[state.cur] = item.code;
+    state.log.add('reset', { qid:item.qid });
+    state.log.snapshot(item.qid, item.code);
+    updateCodeState(item); refreshDots();
+  };
+}
+
+function updateCodeState(item){
+  const pct = SC.codeMatch(state.answers[state.cur], item.answer);
+  const el = $('ex-cstate');
+  const done = pct >= 98;
+  el.textContent = done ? '模範解答と一致しています' : '入力中';
+  el.classList.toggle('done', done);
+}
+
+/* 回答済みかどうか。記述式は元コードから変化していれば回答済みとみなす */
+function isAnswered(i){
+  const q = state.exam[i];
+  if (q.kind === 'code') return SC.normalizeCode(state.answers[i]) !== SC.normalizeCode(q.code);
+  return state.answers[i] != null;
+}
+function unansweredIdx(){
+  const out = [];
+  for (let i = 0; i < state.exam.length; i++) if (!isAnswered(i)) out.push(i);
+  return out;
+}
+function refreshDots(){
+  Array.prototype.forEach.call($('ex-dots').querySelectorAll('.dot'), function(b){
+    b.classList.toggle('answered', isAnswered(+b.dataset.i));
+  });
+  syncSubmit();
+}
+
+/* 選択式と記述式をまとめて1本の出題リストにする */
+function buildMixed(key){
+  const items = [];
+  const pool = Q[key] || [];
+  if (pool.length){
+    SC.buildExam(key, pool, {
+      count: C.CHOICE_COUNT,
+      shuffleQuestions: C.SHUFFLE_QUESTIONS,
+      shuffleChoices: C.SHUFFLE_CHOICES,
+    }).forEach(function(q){ items.push(Object.assign({ kind:'choice' }, q)); });
+  }
+  const cpool = (window.SC_CODE && window.SC_CODE[key]) || [];
+  const picked = C.SHUFFLE_QUESTIONS ? SC.shuffle(cpool) : cpool.slice();
+  picked.slice(0, C.CODE_COUNT).forEach(function(q, i){
+    items.push({
+      kind:'code', qid: key + '-c' + (cpool.indexOf(q) + 1),
+      t: q.t, task: q.task, code: q.code, answer: q.answer, exp: q.exp,
+    });
+  });
+  return items;
+}
+
+async function startExam(key){
+  const lang = LANGS.find(function(l){ return l.key === key; });
+  const exam = buildMixed(key);
+  if (!exam.length){ toast('この言語の問題はまだ登録されていません'); return; }
+  state.lang = lang;
+  state.exam = exam;
+  state.answers = exam.map(function(q){ return q.kind === 'code' ? q.code : null; });
+  state.cur = 0; state.startedAt = Date.now();
+  state.log = SC.createLogger();
+  state.log.add('open', { lang: key, total: exam.length });
+  await ensureSession();
+  await startRecording();
+  $('ex-lang').textContent = lang.label;
+  show('screen-exam'); renderQ();
+}
+
+/* ---- 録画（カメラ映像のみ） ---- */
+async function startRecording(){
+  state.recBlob = null; state.recMime = '';
+  if (!C.RECORD || !SC.canRecord() || !state.caps.camera){
+    setRecBadge(false, SC.canRecord() ? '録画なし' : '録画非対応');
+    return;
+  }
+  if (!state.consent){ setRecBadge(false, '録画なし'); return; }
+  try{
+    state.recStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'user', width:{ ideal:C.RECORD_WIDTH }, frameRate:{ ideal:C.RECORD_FPS } },
+      audio: false,
+    });
+    state.rec = SC.createRecorder(state.recStream, { bitrate: C.RECORD_BITRATE });
+    state.rec.start();
+    state.recMime = state.rec.mime;
+    setRecBadge(true, '録画中');
+    state.log.add('rec_start', { mime: state.rec.mime });
+  }catch(e){
+    console.error('[SkillCheck] recorder failed', e && e.name, e && e.message);
+    setRecBadge(false, '録画できません');
+    state.log.add('rec_fail', { name: e && e.name });
+  }
+}
+
+async function stopRecording(){
+  if (!state.rec) return null;
+  let blob = null;
+  try{ blob = await state.rec.stop(); }catch(e){ console.error('[SkillCheck] stop failed', e); }
+  SC.closeCamera(state.recStream);
+  state.recStream = null; state.rec = null;
+  setRecBadge(false, '録画終了');
+  return blob;
+}
+
+function setRecBadge(on, text){
+  $('ex-rec').classList.toggle('off', !on);
+  $('ex-rec-txt').textContent = text;
+}
+
+function renderQ(){
+  const item = state.exam[state.cur];
+  const n = state.exam.length;
+  const isCode = item.kind === 'code';
+  $('ex-cnt').textContent = (state.cur+1) + ' / ' + n;
+  $('ex-bar').style.width = Math.round(((state.cur+1)/n)*100) + '%';
+  $('ex-qno').textContent = 'Q' + (state.cur+1) + (isCode ? '（記述）' : '（選択）');
+  $('ex-q').textContent = isCode ? item.t : item.q;
+  $('ex-choices').style.display = isCode ? 'none' : '';
+  $('ex-code').style.display = isCode ? '' : 'none';
+
+  if (isCode){ renderCodeQ(item); }
+  else { renderChoiceQ(item, n); }
+  $('ex-dots').innerHTML = state.exam.map(function(q,i){
+    return '<button class="dot'+(isAnswered(i)?' answered':'')+(i===state.cur?' cur':'')+'" data-i="'+i+'">'+(i+1)+'</button>';
   }).join('');
   Array.prototype.forEach.call($('ex-dots').querySelectorAll('.dot'), function(b){
     b.onclick = function(){ state.cur = +b.dataset.i; renderQ(); };
   });
   $('btn-prev').disabled = state.cur === 0;
+  syncSubmit();
+}
+
+function syncSubmit(){
+  const n = state.exam.length;
   const last = state.cur === n-1;
   $('btn-next').style.display   = last ? 'none' : '';
   $('btn-submit').style.display = last ? '' : 'none';
-  const left = SC.unanswered(state.exam, state.answers).length;
+  const left = unansweredIdx().length;
   $('btn-submit').disabled = left > 0;
   $('btn-submit').textContent = left > 0 ? '未回答が' + left + '問あります' : '解答を提出する';
   $('ex-left').textContent = (last && left > 0)
@@ -586,15 +806,18 @@ function renderQ(){
 }
 
 async function submitExam(){
-  const left = SC.unanswered(state.exam, state.answers);
+  const left = unansweredIdx();
   if (left.length){
     if (!confirm('未回答が ' + left.length + ' 問あります。このまま提出しますか？')){
       state.cur = left[0]; renderQ(); return;
     }
   }
   const btn = $('btn-submit'); btn.disabled = true; btn.textContent = '提出中…';
+  state.log.add('submit', { left: left.length });
 
-  let reauthOk = false;
+  const dur = Date.now() - state.startedAt;
+  const recBlob = await stopRecording();
+
   let photoEnd = null;
   if (C.PHOTO_ON_FINISH && state.bioMethod === 'photo' && state.caps.camera){
     try{
@@ -602,14 +825,44 @@ async function submitExam(){
       const st = await SC.openCamera(v);
       await new Promise(function(r){ setTimeout(r, 700); });
       photoEnd = SC.snapPhoto(v, 360); SC.closeCamera(st);
-      reauthOk = true;
     }catch(e){ /* 撮影できなくても提出は続行 */ }
   }
 
-  const g = SC.gradeExam(state.exam, state.answers, C.PASS_LINE);
-  const dur = Date.now() - state.startedAt;
+  // 選択式のみ自動採点。記述式は管理画面での目視レビュー
+  const choiceIdx = [];
+  state.exam.forEach(function(q,i){ if (q.kind !== 'code') choiceIdx.push(i); });
+  const cExam = choiceIdx.map(function(i){ return state.exam[i]; });
+  const cAns  = choiceIdx.map(function(i){ return state.answers[i]; });
+  const g = SC.gradeExam(cExam, cAns, C.PASS_LINE);
+
+  const codeRows = [];
+  state.exam.forEach(function(q,i){
+    if (q.kind !== 'code') return;
+    const submitted = state.answers[i] || '';
+    codeRows.push({
+      lang_key: state.lang.key, qid: q.qid, title: q.t, task: q.task,
+      submitted: submitted, match_pct: SC.codeMatch(submitted, q.answer),
+    });
+  });
+
+  const notes = [];
+  let resultId = null;
+
+  // 1. 録画をストレージへ
+  let videoPath = null;
+  if (recBlob && recBlob.size && SC.sbReady()){
+    try{
+      const name = SC.newId() + '.' + SC.extFor(state.recMime);
+      videoPath = await SC.uploadRecording(recBlob, state.lang.key + '/' + name);
+    }catch(e){
+      console.error('[SkillCheck] upload failed', e.status, e.message, e.body);
+      notes.push('録画を送信できませんでした（' + SC.jaHttpError(e.status) + '）');
+    }
+  }
+
+  // 2. 結果
   try{
-    await SC.saveResult({
+    const row = await SC.saveResult({
       session_id: state.sessionId,
       candidate_name: state.name,
       birth_date: state.birth,
@@ -617,28 +870,69 @@ async function submitExam(){
       lang_label: state.lang.label,
       total: g.total, correct: g.correct, score: g.score,
       passed: g.passed, rank: g.rank, duration_ms: dur,
-      auth_method: state.bioMethod, reauth_ok: reauthOk, photo_end: photoEnd,
+      auth_method: state.bioMethod, reauth_ok: !!photoEnd, photo_end: photoEnd,
+      code_total: codeRows.length, review_status: codeRows.length ? 'pending' : 'none',
+      video_path: videoPath, video_mime: state.recMime || null,
+      video_bytes: recBlob ? recBlob.size : null,
       answers: g.details.map(function(d){ return { qid:d.qid, picked:d.picked, ok:d.ok }; }),
     });
-    $('rs-saved').textContent = SC.sbReady() ? '結果を送信しました。' : '結果はこの端末に保存されました（Supabase未設定）。';
+    resultId = row && row.id ? row.id : null;
   }catch(e){
     console.error('[SkillCheck] sc_results insert failed', e.status, e.message, e.body);
-    $('rs-saved').textContent = '結果を送信できませんでした。' + SC.jaHttpError(e.status) + '。担当者にお知らせください。';
+    notes.push('結果を送信できませんでした（' + SC.jaHttpError(e.status) + '）');
   }
+
+  // 3. 記述解答
+  if (codeRows.length){
+    try{
+      await SC.saveCodeAnswers(codeRows.map(function(r){
+        return Object.assign({ result_id: resultId, session_id: state.sessionId }, r);
+      }));
+    }catch(e){
+      console.error('[SkillCheck] sc_code_answers insert failed', e.status, e.message, e.body);
+      notes.push('記述解答を送信できませんでした（' + SC.jaHttpError(e.status) + '）');
+    }
+  }
+
+  // 4. 操作ログ
+  try{
+    await SC.saveLog({
+      result_id: resultId, session_id: state.sessionId, lang_key: state.lang.key,
+      started_at: state.log.startedAt, duration_ms: dur, events: state.log.dump(),
+    });
+  }catch(e){
+    console.error('[SkillCheck] sc_logs insert failed', e.status, e.message, e.body);
+    notes.push('操作ログを送信できませんでした（' + SC.jaHttpError(e.status) + '）');
+  }
+
+  $('rs-saved').textContent = notes.length
+    ? notes.join(' / ') + '。担当者にお知らせください。'
+    : (SC.sbReady() ? '解答を送信しました。' : '解答はこの端末に保存されました（Supabase未設定）。');
+
   btn.disabled = false; btn.textContent = '解答を提出する';
-  state.finished[state.lang.key] = g.score;
-  renderResult(g, dur);
+  state.finished[state.lang.key] = g.total ? g.score : null;
+  renderResult(g, dur, codeRows);
   show('screen-result');
 }
 
-function renderResult(g, dur){
+function renderResult(g, dur, codeRows){
   const hero = $('rs-hero');
+  const hasCode = codeRows && codeRows.length;
   hero.className = 'score-hero ' + (g.passed ? 'pass' : 'fail');
-  $('rs-verdict').textContent = g.passed ? '合格ライン到達' : '合格ライン未到達';
+  $('rs-verdict').textContent = hasCode ? '選択式の結果' : (g.passed ? '合格ライン到達' : '合格ライン未到達');
   $('rs-score').textContent = g.score;
-  $('rs-meta').textContent = state.lang.label + ' ／ ' + g.correct + '問正解 / 全' + g.total + '問 ／ 所要 ' + SC.formatDuration(dur);
-  $('rs-rank').textContent = '評価 ' + g.rank + '（合格ライン ' + g.passLine + '点）';
-  $('rs-review').innerHTML = g.details.map(function(d,i){
+  $('rs-meta').textContent = state.lang.label + ' ／ 選択式 ' + g.correct + '問正解 / 全' + g.total + '問'
+    + (hasCode ? ' ／ 記述式 ' + codeRows.length + '問は担当者が確認します' : '')
+    + ' ／ 所要 ' + SC.formatDuration(dur);
+  $('rs-rank').textContent = hasCode
+    ? '最終評価は記述式の確認後に確定します'
+    : '評価 ' + g.rank + '（合格ライン ' + g.passLine + '点）';
+
+  const codeHtml = !hasCode ? '' : '<div class="rev"><div class="rq">'
+    + '<span class="mk o">—</span><span>記述式 ' + codeRows.length + '問は提出済みです</span></div>'
+    + '<div class="exp" style="margin-left:32px">採点は担当者が内容を確認して行います。この画面には正誤は表示されません。</div></div>';
+
+  $('rs-review').innerHTML = codeHtml + g.details.map(function(d,i){
     const yours = d.picked==null ? '未回答' : String.fromCharCode(65+d.picked)+'. '+d.choices[d.picked];
     const right = String.fromCharCode(65+d.answer)+'. '+d.choices[d.answer];
     return '<div class="rev">' +
@@ -653,6 +947,12 @@ function renderResult(g, dur){
 }
 
 /* ================= 起動 ================= */
+if (needConsent()){
+  $('consent').style.display = '';
+  $('consent-ok').addEventListener('change', function(){
+    state.consent = this.checked; syncStart();
+  });
+}
 $('in-name').addEventListener('input', checkName);
 $('in-birth').addEventListener('input', checkBirth);
 $('in-birth').addEventListener('change', checkBirth);
@@ -660,11 +960,23 @@ $('btn-start').onclick = function(){ renderLangs(); show('screen-langs'); };
 $('btn-prev').onclick  = function(){ if(state.cur>0){ state.cur--; renderQ(); } };
 $('btn-next').onclick  = function(){ if(state.cur<state.exam.length-1){ state.cur++; renderQ(); } };
 $('btn-submit').onclick = submitExam;
-$('btn-quit').onclick  = function(){ if(confirm('この試験を中断して一覧に戻りますか？解答は保存されません。')){ renderLangs(); show('screen-langs'); } };
+$('btn-quit').onclick  = function(){
+  if(!confirm('この試験を中断して一覧に戻りますか？解答と録画は保存されません。')) return;
+  stopRecording();
+  renderLangs(); show('screen-langs');
+};
 $('btn-back').onclick  = function(){ renderLangs(); show('screen-langs'); };
-window.addEventListener('beforeunload', function(){ SC.closeCamera(state.camStream); });
+window.addEventListener('beforeunload', function(){
+  SC.closeCamera(state.camStream); SC.closeCamera(state.recStream);
+});
+/* 画面を離れた記録（別タブへの移動検知） */
+document.addEventListener('visibilitychange', function(){
+  if (state.log && $('screen-exam').classList.contains('on')){
+    state.log.add(document.hidden ? 'blur' : 'focus', {});
+  }
+});
 
-$('note-count').textContent = (!C.QUESTION_COUNT || C.QUESTION_COUNT<=0) ? '全' : C.QUESTION_COUNT;
+$('note-count').textContent = C.CHOICE_COUNT + C.CODE_COUNT;
 $('in-birth').min = SC.BIRTH_MIN;
 $('in-birth').max = SC.isoDate(new Date());
 document.title = C.APP_TITLE + ' — ' + C.ORG_NAME;

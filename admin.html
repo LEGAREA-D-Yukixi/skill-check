@@ -73,6 +73,40 @@ tbody tr:hover{background:#f7faff}
 .modal.on{display:grid}
 .modal img{max-width:min(460px,90vw);border-radius:14px;transform:scaleX(-1)}
 .note{color:#9fb4dd;font-size:11.5px;margin-top:16px;text-align:center}
+.pill.r{background:#fff4e0;color:#b4730c}
+.pill.d{background:#eaf0fb;color:#1d4ed8}
+.linkish{background:none;border:none;color:var(--blue);font-weight:700;cursor:pointer;font-size:13px;padding:0}
+.linkish:hover{text-decoration:underline}
+
+/* 審査パネル */
+.panel{position:fixed;inset:0;background:rgba(6,16,38,.75);display:none;z-index:45;padding:18px;overflow:auto}
+.panel.on{display:block}
+.panel-in{max-width:1080px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden}
+.panel-head{display:flex;align-items:center;gap:14px;padding:16px 22px;background:linear-gradient(135deg,#1a3d85,#0a1c44);color:#fff}
+.panel-head b{font-size:16px}
+.panel-head .sp{flex:1}
+.panel-body{padding:22px;display:grid;grid-template-columns:330px 1fr;gap:22px;align-items:start}
+@media(max-width:900px){.panel-body{grid-template-columns:1fr}}
+.rec-box video{width:100%;border-radius:12px;background:#0b1730;display:block;transform:scaleX(-1)}
+.rec-empty{padding:28px;text-align:center;color:var(--muted);font-size:13px;background:#f5f7fb;border-radius:12px}
+.replay{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.replay-head{padding:9px 13px;background:#f6f8fc;font-size:12px;font-weight:700;color:var(--muted);display:flex;gap:10px;align-items:center}
+.replay pre{margin:0;padding:13px;font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:12px;
+  line-height:1.65;white-space:pre;overflow:auto;max-height:230px;background:#fbfcfe}
+.replay input[type=range]{width:100%;margin:0;accent-color:var(--blue)}
+.replay-ctl{padding:10px 13px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.ans{border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.ans-h{padding:11px 14px;background:#f7f9fd;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ans-h b{font-size:13.5px}
+.ans-h .m{margin-left:auto;font-size:11.5px;font-weight:800;border-radius:999px;padding:3px 10px;background:#eaf0fb;color:#1d4ed8}
+.ans-task{padding:10px 14px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
+.ans pre{margin:0;padding:13px 14px;font-family:"SFMono-Regular",Menlo,Consolas,monospace;
+  font-size:12.5px;line-height:1.7;white-space:pre;overflow:auto;max-height:260px}
+.ans-score{padding:11px 14px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.ans-score span{font-size:12px;color:var(--muted)}
+.sbtn{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer}
+.sbtn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.sbtn:hover{border-color:var(--blue-300)}
 </style>
 </head>
 <body>
@@ -108,13 +142,15 @@ tbody tr:hover{background:#f7faff}
       <div class="stat"><span>受験者数</span><b id="st-p">0</b></div>
       <div class="stat"><span>平均点</span><b id="st-avg">0</b></div>
       <div class="stat"><span>合格率</span><b id="st-rate">0%</b></div>
+      <div class="stat"><span>未審査</span><b id="st-rev">0</b></div>
     </div>
     <div class="card"><div class="pad">
       <div class="toolbar">
         <div class="field"><label for="f-name">氏名で絞り込み</label><input id="f-name" type="search" placeholder="氏名"></div>
         <div class="field" style="max-width:190px"><label for="f-lang">言語</label><select id="f-lang"><option value="">すべて</option></select></div>
         <div class="field" style="max-width:150px"><label for="f-res">判定</label><select id="f-res">
-          <option value="">すべて</option><option value="1">合格のみ</option><option value="0">不合格のみ</option></select></div>
+          <option value="">すべて</option><option value="1">合格のみ</option><option value="0">不合格のみ</option>
+          <option value="r">未審査のみ</option></select></div>
         <button class="btn btn-ghost" id="btn-csv">CSV出力</button>
         <button class="btn btn-ghost" id="btn-reload">再読込</button>
         <button class="btn btn-ghost" id="btn-logout">ログアウト</button>
@@ -123,7 +159,7 @@ tbody tr:hover{background:#f7faff}
         <table>
           <thead><tr>
             <th>受験日時</th><th>氏名</th><th>生年月日</th><th>言語</th>
-            <th>得点</th><th>評価</th><th>判定</th><th>所要</th><th>本人確認</th><th>写真</th>
+            <th>選択式</th><th>記述式</th><th>所要</th><th>本人確認</th><th>写真</th><th></th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
@@ -135,6 +171,36 @@ tbody tr:hover{background:#f7faff}
 </div>
 
 <div class="modal" id="modal"><img id="modal-img" alt="受験者の顔写真"></div>
+
+<div class="panel" id="panel" role="dialog" aria-modal="true" aria-label="記述解答の審査">
+  <div class="panel-in">
+    <div class="panel-head">
+      <b id="p-name">—</b><span id="p-meta" style="font-size:12.5px;color:#9fb8e8"></span>
+      <div class="sp"></div>
+      <button class="btn btn-ghost" id="p-close" style="padding:9px 15px;font-size:13px">閉じる</button>
+    </div>
+    <div class="panel-body">
+      <div>
+        <div class="rec-box" id="p-rec"></div>
+        <div class="replay" id="p-replay" style="display:none">
+          <div class="replay-head">操作の再生<span id="p-rtime" style="margin-left:auto;font-weight:400"></span></div>
+          <pre id="p-rcode"></pre>
+          <div class="replay-ctl">
+            <button class="sbtn" id="p-rplay">再生</button>
+            <input type="range" id="p-rseek" min="0" value="0">
+          </div>
+        </div>
+      </div>
+      <div>
+        <div id="p-answers"></div>
+        <div class="btn-row" style="display:flex;gap:10px">
+          <button class="btn btn-primary" id="p-save">審査結果を保存</button>
+        </div>
+        <div class="err" id="p-err"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="config.js"></script>
 <script>
@@ -223,6 +289,7 @@ function filtered(){
     if (lg && r.lang_label !== lg) return false;
     if (rs === '1' && !r.passed) return false;
     if (rs === '0' && r.passed) return false;
+    if (rs === 'r' && !(r.code_total && r.review_status !== 'done')) return false;
     return true;
   });
 }
@@ -240,12 +307,20 @@ function authLabel(r){
   return base;
 }
 
+function reviewCell(r){
+  if (!r.code_total) return '<span style="color:#5f6f92">—</span>';
+  if (r.review_status === 'done')
+    return '<span class="pill d">審査済 ' + (r.code_score == null ? '' : r.code_score + '点') + '</span>';
+  return '<span class="pill r">未審査 ' + r.code_total + '問</span>';
+}
+
 function render(){
   const list = filtered();
   $('st-n').textContent = list.length;
   $('st-p').textContent = new Set(list.map(function(r){ return r.candidate_name + '|' + r.birth_date; })).size;
   $('st-avg').textContent = list.length ? Math.round(list.reduce(function(a,r){ return a + (r.score||0); },0)/list.length) : 0;
   $('st-rate').textContent = list.length ? Math.round(list.filter(function(r){ return r.passed; }).length/list.length*100)+'%' : '0%';
+  $('st-rev').textContent = list.filter(function(r){ return r.code_total && r.review_status !== 'done'; }).length;
 
   $('empty').style.display = list.length ? 'none' : '';
   $('empty').textContent = '該当する受験記録はありません。';
@@ -255,25 +330,32 @@ function render(){
       '<td><b>'+esc(r.candidate_name)+'</b></td>' +
       '<td>'+esc(r.birth_date)+'</td>' +
       '<td>'+esc(r.lang_label)+'</td>' +
-      '<td><b>'+(r.score||0)+'</b> <span style="color:#5f6f92;font-size:11.5px">('+(r.correct||0)+'/'+(r.total||0)+')</span></td>' +
-      '<td><span class="rk">'+esc(r.rank||'-')+'</span></td>' +
-      '<td><span class="pill '+(r.passed?'p':'f')+'">'+(r.passed?'合格':'不合格')+'</span></td>' +
+      '<td><b>'+(r.score||0)+'</b> <span style="color:#5f6f92;font-size:11.5px">('+(r.correct||0)+'/'+(r.total||0)+')</span> '
+        + '<span class="pill '+(r.passed?'p':'f')+'">'+(r.passed?'合格':'不合格')+'</span></td>' +
+      '<td>'+reviewCell(r)+'</td>' +
       '<td>'+fmtDur(r.duration_ms)+'</td>' +
       '<td class="auth-ic">'+esc(authLabel(r))+'</td>' +
       '<td>'+(r.photo_end?'<img class="thumb" src="'+r.photo_end+'" alt="提出時の顔写真">':'—')+'</td>' +
+      '<td><button class="linkish" data-open="'+esc(r.id)+'">'+(r.code_total?'審査する':'詳細')+'</button></td>' +
     '</tr>';
   }).join('');
   Array.prototype.forEach.call($('rows').querySelectorAll('.thumb'), function(img){
     img.onclick = function(){ $('modal-img').src = img.src; $('modal').classList.add('on'); };
   });
+  Array.prototype.forEach.call($('rows').querySelectorAll('[data-open]'), function(b){
+    b.onclick = function(){ openPanel(b.dataset.open); };
+  });
 }
 
 function toCsv(){
-  const head = ['受験日時','氏名','生年月日','言語','得点','正解数','問題数','評価','判定','所要秒','再認証'];
+  const head = ['受験日時','氏名','生年月日','言語','選択式得点','正解数','問題数','評価','判定',
+                '記述問題数','記述得点','審査状態','所要秒','録画'];
   const body = filtered().map(function(r){
     return [fmtDate(r.created_at), r.candidate_name, r.birth_date, r.lang_label, r.score,
             r.correct, r.total, r.rank, r.passed?'合格':'不合格',
-            Math.round((r.duration_ms||0)/1000), r.reauth_ok?'あり':'なし'];
+            r.code_total||0, r.code_score==null?'':r.code_score,
+            r.code_total ? (r.review_status==='done'?'審査済':'未審査') : '—',
+            Math.round((r.duration_ms||0)/1000), r.video_path?'あり':'なし'];
   });
   const csv = [head].concat(body).map(function(row){
     return row.map(function(v){ return '"' + String(v==null?'':v).replace(/"/g,'""') + '"'; }).join(',');
@@ -284,6 +366,197 @@ function toCsv(){
   a.download = 'skillcheck_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click(); URL.revokeObjectURL(a.href);
 }
+
+/* =========================================================
+   記述解答の審査パネル
+   ========================================================= */
+const BASE = function(){ return String(C.SUPABASE_URL).replace(/\/+$/, ''); };
+function auth(){ return { 'apikey': C.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + token }; }
+
+let P = { row:null, answers:[], events:[], scores:{}, videoUrl:null, timer:null, playing:false };
+
+async function api(path){
+  const res = await fetch(BASE() + path, { headers: auth() });
+  if (!res.ok) throw { status: res.status };
+  return await res.json();
+}
+
+async function openPanel(resultId){
+  const row = rows.find(function(r){ return r.id === resultId; });
+  if (!row) return;
+  P = { row:row, answers:[], events:[], scores:{}, videoUrl:null, timer:null, playing:false };
+  $('p-name').textContent = row.candidate_name;
+  $('p-meta').textContent = row.lang_label + ' ／ ' + fmtDate(row.created_at);
+  $('p-err').textContent = '';
+  $('p-answers').innerHTML = '<div class="empty">読み込み中…</div>';
+  $('p-rec').innerHTML = '<div class="rec-empty">読み込み中…</div>';
+  $('p-replay').style.display = 'none';
+  $('panel').classList.add('on');
+  document.body.style.overflow = 'hidden';
+
+  try{
+    P.answers = await api('/rest/v1/sc_code_answers?result_id=eq.' + resultId + '&select=*&order=qid.asc');
+  }catch(e){ P.answers = []; }
+  renderAnswers();
+
+  try{
+    const logs = await api('/rest/v1/sc_logs?result_id=eq.' + resultId + '&select=*&limit=1');
+    P.events = (logs[0] && logs[0].events) || [];
+  }catch(e){ P.events = []; }
+  setupReplay();
+
+  loadVideo(row);
+}
+
+function renderAnswers(){
+  if (!P.answers.length){
+    $('p-answers').innerHTML = '<div class="empty">記述解答はありません。</div>';
+    $('p-save').style.display = 'none';
+    return;
+  }
+  $('p-save').style.display = '';
+  $('p-answers').innerHTML = P.answers.map(function(a){
+    P.scores[a.id] = a.score == null ? null : a.score;
+    const btns = [0,3,5,8,10].map(function(v){
+      return '<button class="sbtn' + (a.score === v ? ' on' : '') + '" data-id="' + esc(a.id) + '" data-v="' + v + '">' + v + '</button>';
+    }).join('');
+    return '<div class="ans">'
+      + '<div class="ans-h"><b>' + esc(a.title || a.qid) + '</b>'
+      + '<span class="m">一致率 ' + (a.match_pct == null ? '—' : a.match_pct + '%') + '</span></div>'
+      + '<div class="ans-task">' + esc(a.task || '') + '</div>'
+      + '<pre>' + esc(a.submitted || '') + '</pre>'
+      + '<div class="ans-score"><span>評価（10点満点）</span>' + btns + '</div>'
+      + '</div>';
+  }).join('');
+  Array.prototype.forEach.call($('p-answers').querySelectorAll('.sbtn'), function(b){
+    b.onclick = function(){
+      P.scores[b.dataset.id] = +b.dataset.v;
+      Array.prototype.forEach.call($('p-answers').querySelectorAll('[data-id="' + b.dataset.id + '"]'), function(x){
+        x.classList.toggle('on', x === b);
+      });
+    };
+  });
+}
+
+/* ---- 録画 ---- */
+async function loadVideo(row){
+  if (!row.video_path){
+    $('p-rec').innerHTML = '<div class="rec-empty">録画はありません</div>';
+    return;
+  }
+  try{
+    const path = String(row.video_path).replace(/^[^/]+\//, '');
+    const bucket = String(row.video_path).split('/')[0];
+    const res = await fetch(BASE() + '/storage/v1/object/' + bucket + '/' + path, { headers: auth() });
+    if (!res.ok) throw { status: res.status };
+    const blob = await res.blob();
+    P.videoUrl = URL.createObjectURL(blob);
+    $('p-rec').innerHTML = '<video controls playsinline src="' + P.videoUrl + '"></video>';
+  }catch(e){
+    console.error('[SkillCheck] video load failed', e);
+    $('p-rec').innerHTML = '<div class="rec-empty">録画を読み込めませんでした</div>';
+  }
+}
+
+/* ---- 操作ログの再生 ---- */
+function setupReplay(){
+  const codes = P.events.filter(function(e){ return e.type === 'code'; });
+  if (!P.events.length){ $('p-replay').style.display = 'none'; return; }
+  $('p-replay').style.display = '';
+  const maxT = P.events[P.events.length - 1].t || 0;
+  const seek = $('p-rseek');
+  seek.max = maxT; seek.value = 0;
+  drawAt(0);
+  seek.oninput = function(){ stopReplay(); drawAt(+seek.value); };
+  $('p-rplay').onclick = function(){ P.playing ? stopReplay() : playReplay(maxT); };
+}
+function drawAt(t){
+  let text = '（入力なし）', label = '';
+  for (let i = 0; i < P.events.length; i++){
+    const e = P.events[i];
+    if (e.t > t) break;
+    if (e.type === 'code') text = e.v;
+    if (e.type === 'choice') label = '選択式に解答';
+    if (e.type === 'paste') label = '貼り付け';
+    if (e.type === 'blur') label = '画面を離れました';
+    if (e.type === 'focus') label = '画面に戻りました';
+  }
+  $('p-rcode').textContent = text;
+  $('p-rtime').textContent = fmtDur(t) + (label ? ' ／ ' + label : '');
+}
+function playReplay(maxT){
+  P.playing = true; $('p-rplay').textContent = '停止';
+  const seek = $('p-rseek');
+  P.timer = setInterval(function(){
+    const v = +seek.value + 250;
+    if (v > maxT){ stopReplay(); return; }
+    seek.value = v; drawAt(v);
+  }, 100);
+}
+function stopReplay(){
+  P.playing = false; $('p-rplay').textContent = '再生';
+  if (P.timer) clearInterval(P.timer);
+  P.timer = null;
+}
+
+/* ---- 審査結果の保存 ---- */
+async function saveReview(){
+  const b = $('p-save'); b.disabled = true; b.textContent = '保存中…';
+  $('p-err').textContent = '';
+  const me = (function(){
+    try{ return JSON.parse(atob(token.split('.')[1])).email || ''; }catch(e){ return ''; }
+  })();
+  try{
+    const now = new Date().toISOString();
+    for (let i = 0; i < P.answers.length; i++){
+      const a = P.answers[i];
+      const v = P.scores[a.id];
+      if (v == null) continue;
+      const res = await fetch(BASE() + '/rest/v1/sc_code_answers?id=eq.' + a.id, {
+        method:'PATCH',
+        headers: Object.assign({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }, auth()),
+        body: JSON.stringify({ score: v, reviewed_by: me, reviewed_at: now }),
+      });
+      if (!res.ok) throw { status: res.status };
+      a.score = v;
+    }
+    const scored = P.answers.filter(function(a){ return a.score != null; });
+    const sum = scored.reduce(function(x,a){ return x + a.score; }, 0);
+    const all = scored.length === P.answers.length && P.answers.length > 0;
+    const res2 = await fetch(BASE() + '/rest/v1/sc_results?id=eq.' + P.row.id, {
+      method:'PATCH',
+      headers: Object.assign({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }, auth()),
+      body: JSON.stringify({
+        code_score: sum,
+        review_status: all ? 'done' : 'pending',
+        reviewed_by: me, reviewed_at: now,
+      }),
+    });
+    if (!res2.ok) throw { status: res2.status };
+    P.row.code_score = sum;
+    P.row.review_status = all ? 'done' : 'pending';
+    render();
+    closePanel();
+  }catch(e){
+    console.error('[SkillCheck] review save failed', e);
+    $('p-err').textContent = e && e.status === 403
+      ? '保存する権限がありません' : '保存できませんでした';
+  }
+  b.disabled = false; b.textContent = '審査結果を保存';
+}
+
+function closePanel(){
+  stopReplay();
+  if (P.videoUrl) URL.revokeObjectURL(P.videoUrl);
+  $('panel').classList.remove('on');
+  $('p-rec').innerHTML = '';
+  document.body.style.overflow = '';
+}
+$('p-close').onclick = closePanel;
+$('p-save').onclick = saveReview;
+window.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && $('panel').classList.contains('on')) closePanel();
+});
 
 $('btn-login').onclick = login;
 $('pw-eye').onclick = function(){
