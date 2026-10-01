@@ -125,6 +125,7 @@
      answers : 選択したインデックスの配列（未回答は null）
      --------------------------------------------------------- */
 
+  // 選択式は1問1点。score は正解数そのもの、pct は百分率
   function gradeExam(exam, answers, passLine) {
     const line = typeof passLine === 'number' ? passLine : 70;
     const total = exam.length;
@@ -141,15 +142,46 @@
       };
     });
     const correct = details.filter(function (d) { return d.ok; }).length;
-    const score = scoreOf(correct, total);
+    const pct = scoreOf(correct, total);
     return {
       total: total,
       correct: correct,
-      score: score,
-      passed: score >= line,
+      score: correct,     // 1問1点
+      max: total,
+      pct: pct,
+      passed: pct >= line,
       passLine: line,
-      rank: rankOf(score),
+      rank: rankOf(pct),
       details: details,
+    };
+  }
+
+  /* 選択式と記述式を合算した成績
+     choiceScore : 選択式の得点（＝正解数）
+     choiceMax   : 選択式の問題数
+     codeScore   : 記述式の得点。未審査なら null
+     codeCount   : 記述式の問題数
+     codeMax     : 記述式1問あたりの満点 */
+  function totalScore(o) {
+    const s = o || {};
+    const choiceScore = s.choiceScore || 0;
+    const choiceMax = s.choiceMax || 0;
+    const codeCount = s.codeCount || 0;
+    const codeMax = s.codeMax == null ? 10 : s.codeMax;
+    const line = typeof s.passLine === 'number' ? s.passLine : 70;
+    const complete = codeCount === 0 || (s.codeScore != null);
+    const codeScore = s.codeScore == null ? 0 : s.codeScore;
+    const max = choiceMax + codeCount * codeMax;
+    const score = choiceScore + codeScore;
+    const pct = max ? Math.round((score / max) * 100) : 0;
+    return {
+      score: score,
+      max: max,
+      pct: pct,
+      rank: rankOf(pct),
+      passed: complete && pct >= line,
+      passLine: line,
+      complete: complete,
     };
   }
 
@@ -311,6 +343,7 @@
     buildExam: buildExam,
     gradeExam: gradeExam,
     scoreOf: scoreOf,
+    totalScore: totalScore,
     rankOf: rankOf,
     unanswered: unanswered,
     progressText: progressText,
@@ -495,12 +528,23 @@
   }
 
   /* ---- 画面とカメラを1本の映像に合成する ---- */
+  // DOM に載っていない video はフレームを更新しない環境があるため、画面外に配置する
   function videoFrom(stream) {
     const v = document.createElement('video');
-    v.srcObject = stream; v.muted = true; v.playsInline = true;
+    v.srcObject = stream; v.muted = true; v.playsInline = true; v.autoplay = true;
+    v.setAttribute('aria-hidden', 'true');
+    v.style.cssText = 'position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+    document.body.appendChild(v);
     const p = v.play();
     if (p && p.catch) p.catch(function () {});
     return v;
+  }
+
+  function removeVideo(v) {
+    if (!v) return;
+    try { v.pause(); } catch (e) {}
+    v.srcObject = null;
+    if (v.parentNode) v.parentNode.removeChild(v);
   }
 
   function createComposer(screenStream, camStream, opts) {
@@ -542,8 +586,11 @@
       stop: function () {
         if (timer) clearInterval(timer);
         timer = null;
-        if (sv) sv.srcObject = null;
-        if (cvid) cvid.srcObject = null;
+        removeVideo(sv); removeVideo(cvid);
+      },
+      // 映像が実際に流れているか（0バイト録画の検知用）
+      ready: function () {
+        return !!((sv && sv.videoWidth) || (cvid && cvid.videoWidth));
       },
     };
   }
@@ -569,6 +616,7 @@
         return new Promise(function (resolve) {
           if (rec.state === 'inactive') { resolve(new Blob(chunks, { type: mime })); return; }
           rec.onstop = function () { resolve(new Blob(chunks, { type: mime })); };
+          try { rec.requestData(); } catch (e) {}
           rec.stop();
         });
       },

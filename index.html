@@ -158,23 +158,6 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 .dot.cur{border-color:var(--orange);box-shadow:0 0 0 3px rgba(245,158,11,.22)}
 .hint{color:var(--muted);font-size:12.5px;margin-top:12px;min-height:1em}
 
-/* ===== 受験画面のレイアウト ===== */
-.exam-grid{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
-@media(min-width:900px){
-  .exam-grid{grid-template-columns:minmax(300px,0.8fr) 1.2fr}
-  .exam-grid > .card:not(.model-card){grid-column:2}
-  .model-card{position:sticky;top:18px}
-  .exam-grid:not(.has-model){grid-template-columns:1fr}
-  .exam-grid:not(.has-model) > .card:not(.model-card){grid-column:1}
-}
-.model-card{padding:18px}
-.model-head{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:800;margin-bottom:10px}
-.model-tag{
-  margin-left:auto;font-size:10.5px;font-weight:700;color:#8a6d1f;background:#fdf1d4;
-  border:1px solid #f0d49a;border-radius:999px;padding:3px 10px;
-}
-.model-note{font-size:11.5px;color:var(--muted);margin-top:10px}
-
 /* ===== 記述問題（写経） ===== */
 .code-wrap{margin-top:18px}
 .code-task{
@@ -186,15 +169,13 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
   font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px;
   display:flex;align-items:center;gap:10px;
 }
-.code-state{margin-left:auto;font-weight:700;font-size:11.5px;color:var(--blue)}
-.code-state.done{color:var(--ok)}
 .code-box,.code-edit{
   font-family:"SFMono-Regular",Menlo,Consolas,"Noto Sans Mono CJK JP",monospace;
   font-size:13.5px;line-height:1.72;tab-size:4;
   border-radius:11px;padding:14px 16px;width:100%;
   white-space:pre;overflow:auto;
 }
-.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:420px}
+.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:300px}
 .code-edit{
   background:#fbfcfe;border:1.5px solid var(--line);color:var(--ink);
   min-height:180px;resize:vertical;display:block;
@@ -309,19 +290,8 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 
   <!-- ============ 3. テスト ============ -->
   <section id="screen-exam" class="screen">
-    <div class="exam-grid">
 
-      <!-- 模範解答：録画の対象外に置く。#ex-capture の外側であることが必須 -->
-      <aside class="card model-card" id="ex-model-card" style="display:none">
-        <div class="model-head">
-          <span>模範解答</span>
-          <span class="model-tag">録画されません</span>
-        </div>
-        <pre class="code-box" id="ex-model"></pre>
-        <p class="model-note">このとおりに右（下）の解答欄へ入力してください。</p>
-      </aside>
-
-      <!-- ここから下だけが録画されます -->
+      <!-- 録画される範囲 -->
       <div class="card" id="ex-capture">
         <div class="exam-head">
           <div><div class="lng" id="ex-lang">—</div><div class="cnt" id="ex-cnt">1 / 10</div></div>
@@ -339,7 +309,11 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
           <div class="code-wrap" id="ex-code" style="display:none">
             <div class="code-task" id="ex-task"></div>
             <div class="code-panel">
-              <div class="code-label">解答欄<span class="code-state" id="ex-cstate"></span></div>
+              <div class="code-label">模範解答</div>
+              <pre class="code-box" id="ex-model"></pre>
+            </div>
+            <div class="code-panel">
+              <div class="code-label">解答欄（上のとおりに入力してください）</div>
               <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
                         autocomplete="off" autocorrect="off" wrap="off"></textarea>
             </div>
@@ -357,7 +331,6 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
           </div>
         </div>
       </div>
-    </div>
   </section>
 
   <!-- ============ 4. 結果 ============ -->
@@ -365,7 +338,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
     <div class="card">
       <div class="score-hero" id="rs-hero">
         <div class="verdict" id="rs-verdict">—</div>
-        <div class="num"><span id="rs-score">0</span><em>点</em></div>
+        <div class="num"><span id="rs-score">0</span><em id="rs-unit"> / 4点</em></div>
         <div class="meta" id="rs-meta">—</div>
         <div class="rankchip" id="rs-rank">評価 —</div>
       </div>
@@ -456,7 +429,7 @@ function renderLangs(){
         const n = nc + nw;
         const sc = state.finished[l.key];
         return '<button class="lang'+(sc!=null?' done':'')+'" data-k="'+l.key+'">' +
-          (sc!=null ? '<span class="score">'+sc+'点</span>' : '') +
+          (sc!=null ? '<span class="score">'+esc(sc)+'点</span>' : '') +
           '<span class="tag">'+esc(l.tag)+'</span>' +
           '<span class="nm">'+esc(l.label)+'</span>' +
           '<span class="sub">全'+n+'問（選択'+nc+' / 記述'+nw+'）</span>' +
@@ -509,16 +482,14 @@ function renderChoiceQ(item, n){
    模範解答は画面に出しますが、操作ログには一切渡しません。 */
 function renderCodeQ(item){
   $('ex-task').textContent = item.task;
-  $('ex-model').textContent = item.answer;     // 表示のみ。data-norec の領域
+  $('ex-model').textContent = item.answer;     // 表示のみ。ログには渡さない
   const ed = $('ex-edit');
   ed.value = state.answers[state.cur] == null ? item.code : state.answers[state.cur];
   ed.oninput = null;
-  updateCodeState(item);
   state.log.resetSnapshot();
   ed.oninput = function(){
     state.answers[state.cur] = ed.value;
     state.log.snapshot(item.qid, ed.value);
-    updateCodeState(item);
     refreshDots();
   };
   ed.onpaste = function(){ state.log.add('paste', { qid:item.qid }); };
@@ -527,16 +498,8 @@ function renderCodeQ(item){
     state.answers[state.cur] = item.code;
     state.log.add('reset', { qid:item.qid });
     state.log.snapshot(item.qid, item.code);
-    updateCodeState(item); refreshDots();
+    refreshDots();
   };
-}
-
-function updateCodeState(item){
-  const pct = SC.codeMatch(state.answers[state.cur], item.answer);
-  const el = $('ex-cstate');
-  const done = pct >= 98;
-  el.textContent = done ? '模範解答と一致しています' : '入力中';
-  el.classList.toggle('done', done);
 }
 
 /* 回答済みかどうか。記述式は元コードから変化していれば回答済みとみなす */
@@ -589,10 +552,13 @@ async function startExam(key){
   state.cur = 0; state.startedAt = Date.now();
   state.log = SC.createLogger();
   state.log.add('open', { lang: key, total: exam.length });
-  await ensureSession();
-  await startRecording();
+
+  // 先に画面を出してから録画を始める。
+  // 画面共有の許可はタップ直後でないと求められないため、通信は後回しにする。
   $('ex-lang').textContent = lang.label;
   show('screen-exam'); renderQ();
+  await startRecording();
+  ensureSession();
 }
 
 /* ---- 録画 ----
@@ -611,6 +577,7 @@ async function startRecording(){
   }catch(e){
     console.error('[SkillCheck] camera failed', e && e.name);
     state.log.add('cam_fail', { name: e && e.name });
+    toast(SC.jaCameraError(e));
   }
 
   // 画面（模範解答を除外できる場合のみ）
@@ -627,24 +594,34 @@ async function startRecording(){
     }
   } else if (C.RECORD_SCREEN){
     state.log.add('screen_off', { code: 'unsupported' });
+    toast('このブラウザは画面録画に対応していません。カメラのみ録画します');
   }
 
-  if (!cam && !screen){ setRecBadge(false, '録画できません'); return; }
+  if (!cam && !screen){
+    setRecBadge(false, '録画できません');
+    toast('カメラも画面も取得できなかったため録画しません');
+    return;
+  }
 
   try{
     state.composer = SC.createComposer(screen && screen.stream, cam, {
       width: C.RECORD_CANVAS_W, height: C.RECORD_CANVAS_H, fps: C.RECORD_FPS,
     });
     state.composer.start();
+    // 映像が流れ始めるのを待ってから録画を開始する（空の動画を防ぐ）
+    for (let i = 0; i < 20 && !state.composer.ready(); i++){
+      await new Promise(function(r){ setTimeout(r, 100); });
+    }
     state.rec = SC.createRecorder(state.composer.stream, { bitrate: C.RECORD_BITRATE });
     state.rec.start();
     state.recMime = state.rec.mime;
     state.recKind = screen ? ('画面＋カメラ（' + screen.mode + '）') : 'カメラのみ';
-    setRecBadge(true, screen ? '画面とカメラを録画中' : 'カメラを録画中');
+    setRecBadge(true, screen ? '画面とカメラを録画中' : 'カメラのみ録画中');
     state.log.add('rec_start', { mime: state.rec.mime, kind: state.recKind });
   }catch(e){
     console.error('[SkillCheck] recorder failed', e && e.name, e && e.message);
     setRecBadge(false, '録画できません');
+    toast('録画を開始できませんでした');
     state.log.add('rec_fail', { name: e && e.name });
   }
 }
@@ -678,8 +655,6 @@ function renderQ(){
   $('ex-choices').style.display = isCode ? 'none' : '';
   $('ex-code').style.display = isCode ? '' : 'none';
 
-  $('ex-model-card').style.display = isCode ? '' : 'none';
-  document.querySelector('.exam-grid').classList.toggle('has-model', isCode);
   if (isCode){ renderCodeQ(item); }
   else { renderChoiceQ(item, n); }
   $('ex-dots').innerHTML = state.exam.map(function(q,i){
@@ -740,6 +715,9 @@ async function submitExam(){
 
   // 1. 録画をストレージへ
   let videoPath = null;
+  if (C.RECORD && state.consent && (!recBlob || !recBlob.size)){
+    notes.push('録画を保存できませんでした');
+  }
   if (recBlob && recBlob.size && SC.sbReady()){
     try{
       const name = SC.newId() + '.' + SC.extFor(state.recMime);
@@ -799,7 +777,7 @@ async function submitExam(){
     : (SC.sbReady() ? '解答を送信しました。' : '解答はこの端末に保存されました（Supabase未設定）。');
 
   btn.disabled = false; btn.textContent = '解答を提出する';
-  state.finished[state.lang.key] = g.total ? g.score : null;
+  state.finished[state.lang.key] = g.total ? (g.score + '/' + g.max) : null;
   renderResult(g, dur, codeRows);
   show('screen-result');
 }
@@ -807,19 +785,25 @@ async function submitExam(){
 function renderResult(g, dur, codeRows){
   const hero = $('rs-hero');
   const hasCode = codeRows && codeRows.length;
-  hero.className = 'score-hero ' + (g.passed ? 'pass' : 'fail');
-  $('rs-verdict').textContent = hasCode ? '選択式の結果' : (g.passed ? '合格ライン到達' : '合格ライン未到達');
+  const t = SC.totalScore({
+    choiceScore: g.score, choiceMax: g.max,
+    codeScore: null, codeCount: hasCode ? codeRows.length : 0,
+    codeMax: C.CODE_MAX, passLine: C.PASS_LINE,
+  });
+  hero.className = 'score-hero ' + (hasCode ? '' : (g.passed ? 'pass' : 'fail'));
+  $('rs-verdict').textContent = hasCode ? '選択式の得点' : (g.passed ? '合格ライン到達' : '合格ライン未到達');
   $('rs-score').textContent = g.score;
-  $('rs-meta').textContent = state.lang.label + ' ／ 選択式 ' + g.correct + '問正解 / 全' + g.total + '問'
+  $('rs-unit').textContent = ' / ' + g.max + '点';
+  $('rs-meta').textContent = state.lang.label + ' ／ 選択式は1問1点（' + g.correct + '問正解）'
     + (hasCode ? ' ／ 記述式 ' + codeRows.length + '問は担当者が確認します' : '')
     + ' ／ 所要 ' + SC.formatDuration(dur);
   $('rs-rank').textContent = hasCode
-    ? '最終評価は記述式の確認後に確定します'
-    : '評価 ' + g.rank + '（合格ライン ' + g.passLine + '点）';
+    ? '合計 ' + t.max + '点満点。最終評価は記述式の確認後に確定します'
+    : '評価 ' + g.rank + '（合格ライン ' + g.passLine + '％）';
 
   const codeHtml = !hasCode ? '' : '<div class="rev"><div class="rq">'
     + '<span class="mk o">—</span><span>記述式 ' + codeRows.length + '問は提出済みです</span></div>'
-    + '<div class="exp" style="margin-left:32px">採点は担当者が内容を確認して行います。この画面には正誤は表示されません。</div></div>';
+    + '<div class="exp" style="margin-left:32px">1問' + C.CODE_MAX + '点で担当者が採点します。この画面には正誤は表示されません。</div></div>';
 
   $('rs-review').innerHTML = codeHtml + g.details.map(function(d,i){
     const yours = d.picked==null ? '未回答' : String.fromCharCode(65+d.picked)+'. '+d.choices[d.picked];
@@ -845,11 +829,6 @@ async function setupRecordingUI(){
     syncStart();
     if (this.checked) await fillCameras();
   });
-  const hint = (state.caps.screen === 'element' || state.caps.screen === 'region')
-    ? '画面と顔を録画します。模範解答は録画に映りません。'
-    : 'このブラウザでは画面を録画できないため、顔のみ録画します。';
-  $('consent').insertAdjacentHTML('beforeend',
-    '<p style="font-size:11.5px;color:var(--muted);margin-top:9px">' + hint + '</p>');
 }
 
 /* 外付けカメラを選べるようにする（許可後でないと名前が取れない） */
