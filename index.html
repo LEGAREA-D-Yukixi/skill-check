@@ -145,6 +145,16 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 }
 .model-note{font-size:11.5px;color:var(--muted);margin-top:10px}
 
+/* 模範解答を解答欄の真上に重ねる表示。
+   Element Capture は重なった要素も録画から除外するため、この配置でも映らない。 */
+.model-slot{height:0}
+body.model-overlay .exam-grid{grid-template-columns:1fr}
+body.model-overlay .model-card{
+  position:fixed;z-index:30;margin:0;padding:14px 16px;
+  box-shadow:0 8px 24px rgba(6,20,52,.22);
+}
+body.model-overlay .model-card .code-box{max-height:260px}
+
 /* 画面録画の対象。contain:paint が無いと Element Capture が映像を返さない */
 #ex-capture{contain:paint}
 .exam-head{
@@ -341,6 +351,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 
           <div class="code-wrap" id="ex-code" style="display:none">
             <div class="code-task" id="ex-task"></div>
+            <div class="model-slot" id="ex-model-slot"></div>
             <div class="code-panel">
               <div class="code-label">解答欄</div>
               <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
@@ -400,7 +411,7 @@ const $   = function(id){ return document.getElementById(id); };
 const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
   caps:null, consent:false, camId:'',
-  composer:null, screenStop:null, recKind:'', recNote:'',
+  composer:null, screenStop:null, screenMode:'', recSettled:false, recKind:'', recNote:'',
   log:null, rec:null, camStream:null, recBlob:null, recMime:'',
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
@@ -594,13 +605,59 @@ async function startExam(key){
   await startRecording();
 }
 
+/* ---- 模範解答の配置 ----
+   重なりも除外できる Element Capture のときだけ、解答欄の真上に重ねる。
+   それ以外は録画に映ってしまうので、受験カードの外の横並びにする。 */
+function canOverlayModel(){
+  if (!C.RECORD || !state.consent) return true;      // そもそも録画しないなら自由
+  if (!state.recSettled) return false;               // 方式が決まるまでは安全側に倒す
+  if (!state.screenMode) return true;                // 画面は録画していない
+  return state.screenMode === 'element';
+}
+
+function syncModelLayout(){
+  const on = canOverlayModel();
+  const isCode = $('exam-grid').classList.contains('has-model');
+  const slot = $('ex-model-slot');
+  const card = $('ex-model-card');
+  document.body.classList.toggle('model-overlay', on && isCode);
+
+  if (!isCode){ card.style.cssText = ''; slot.style.height = '0px'; return; }
+
+  if (on){
+    // 解答欄の真上に重ねる（Element Capture が重なりごと除外してくれる）
+    const w = $('ex-code').clientWidth;
+    if (!w) return;
+    card.style.width = w + 'px';
+    card.style.left = '-10000px';
+    card.style.top = '0px';
+    slot.style.height = (card.offsetHeight + 14) + 'px';
+    const r = slot.getBoundingClientRect();
+    card.style.left = Math.round(r.left) + 'px';
+    card.style.top = Math.round(r.top) + 'px';
+    return;
+  }
+
+  // 横に並べる場合も、解答欄と同じ高さに揃えて視線の移動を減らす
+  card.style.cssText = '';
+  slot.style.height = '0px';
+  if (window.innerWidth >= 1000){
+    const cap = $('ex-capture').getBoundingClientRect();
+    const r = slot.getBoundingClientRect();
+    card.style.marginTop = Math.max(0, Math.round(r.top - cap.top)) + 'px';
+  }
+}
+window.addEventListener('resize', syncModelLayout);
+window.addEventListener('scroll', syncModelLayout, { passive: true });
+
 /* ---- 録画 ----
    画面は #ex-capture の範囲だけを撮り、模範解答カードは撮影対象から外します。
    範囲を絞れないブラウザでは画面を撮らず、カメラのみで録画します。 */
 async function startRecording(){
   state.recBlob = null; state.recMime = ''; state.recKind = ''; state.recNote = '';
-  if (!C.RECORD || !state.consent){ setRecBadge(false, '録画なし'); state.recNote = '同意なし'; return; }
-  if (!SC.canRecord()){ setRecBadge(false, '録画非対応'); state.recNote = 'この端末は録画に対応していません'; return; }
+  state.recSettled = false; state.screenMode = '';
+  if (!C.RECORD || !state.consent){ setRecBadge(false, '録画なし'); state.recNote = '同意なし'; settleRec(); return; }
+  if (!SC.canRecord()){ setRecBadge(false, '録画非対応'); state.recNote = 'この端末は録画に対応していません'; settleRec(); return; }
 
   // 1. 画面共有を最初に求める。
   //    許可ダイアログはタップ直後の短い間しか出せないため、カメラより先に呼ぶ必要がある。
@@ -609,6 +666,7 @@ async function startRecording(){
     try{
       screen = await SC.startScreenCapture($('ex-capture'));
       state.screenStop = screen.stop;
+      state.screenMode = screen.mode;
       state.log.add('screen_on', { mode: screen.mode });
     }catch(e){
       console.error('[SkillCheck] screen capture failed', e && e.code, e && e.message);
@@ -638,6 +696,7 @@ async function startRecording(){
     setRecBadge(false, '録画できません');
     state.recNote = state.recNote || 'カメラも画面も取得できませんでした';
     toast('カメラも画面も取得できなかったため録画しません');
+    settleRec();
     return;
   }
 
@@ -687,6 +746,7 @@ async function startRecording(){
     state.recKind = screen ? ('画面＋カメラ（' + screen.mode + '）') : 'カメラのみ';
     setRecBadge(true, screen ? '画面とカメラを録画中' : 'カメラのみ録画中');
     $('btn-rescreen').style.display = screen ? 'none' : '';
+    settleRec();   // 方式が決まったので模範解答の配置を確定する
     state.log.add('rec_start', { mime: state.rec.mime, kind: state.recKind });
   }catch(e){
     console.error('[SkillCheck] recorder failed', e && e.name, e && e.message);
@@ -694,7 +754,13 @@ async function startRecording(){
     state.recNote = (state.recNote ? state.recNote + ' / ' : '') + '録画を開始できませんでした';
     toast('録画を開始できませんでした');
     state.log.add('rec_fail', { name: e && e.name });
+    settleRec();
   }
+}
+
+function settleRec(){
+  state.recSettled = true;
+  syncModelLayout();
 }
 
 async function stopRecording(){
@@ -705,7 +771,8 @@ async function stopRecording(){
   if (state.composer) state.composer.stop();
   if (state.screenStop) state.screenStop();
   SC.closeCamera(state.camStream);
-  state.rec = null; state.composer = null; state.screenStop = null; state.camStream = null;
+  state.rec = null; state.composer = null; state.screenStop = null;
+  state.camStream = null; state.screenMode = '';
   setRecBadge(false, '録画終了');
   return blob;
 }
@@ -726,6 +793,7 @@ function renderQ(){
   $('ex-choices').style.display = isCode ? 'none' : '';
   $('ex-code').style.display = isCode ? '' : 'none';
   $('exam-grid').classList.toggle('has-model', isCode);
+  syncModelLayout();
 
   if (isCode){ renderCodeQ(item); }
   else { renderChoiceQ(item, n); }

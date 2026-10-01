@@ -526,22 +526,24 @@
     // 対象要素が条件を満たさないと、成功を返したまま1フレームも届かないことがあるため、
     // 絞ったあとに必ず映像を確かめ、駄目なら元に戻す。
     // 解除の呼び出しが返らない場合もあるので、すべてタイムアウト付きで扱う。
-    let mode = 'manual';   // ブラウザ側で絞れない場合は合成時に切り出す
-    if (window.CropTarget && track.cropTo) {
-      try {
-        const target = await limit(window.CropTarget.fromElement(el), 3000);
-        await limit(track.cropTo(target), 3000);
-        if (await nextFrame(view, 2000)) mode = 'region';
-        else await limit(track.cropTo(null), 3000).catch(function () {});
-      } catch (e) { /* 次の方式を試す */ }
-    }
-    if (mode === 'manual' && window.RestrictionTarget && track.restrictTo) {
+    // Element Capture は重なった要素も除外できるため最優先。
+    // これが使えると模範解答を解答欄の上に重ねて表示できる。
+    let mode = 'manual';   // どれも使えない場合は合成時に切り出す
+    if (window.RestrictionTarget && track.restrictTo) {
       try {
         const target = await limit(window.RestrictionTarget.fromElement(el), 3000);
         await limit(track.restrictTo(target), 3000);
-        if (await nextFrame(view, 2000)) mode = 'element';
+        if (await nextFrame(view, 2000) && geometryMatches(view, el)) mode = 'element';
         else await limit(track.restrictTo(null), 3000).catch(function () {});
-      } catch (e) { /* タブ全体のまま録る */ }
+      } catch (e) { /* 次の方式を試す */ }
+    }
+    if (mode === 'manual' && window.CropTarget && track.cropTo) {
+      try {
+        const target = await limit(window.CropTarget.fromElement(el), 3000);
+        await limit(track.cropTo(target), 3000);
+        if (await nextFrame(view, 2000) && geometryMatches(view, el)) mode = 'region';
+        else await limit(track.cropTo(null), 3000).catch(function () {});
+      } catch (e) { /* 合成時に切り出す */ }
     }
     // 絞り込みを解除した直後は映像が止まっていることがあるので最後に確認する
     if (!(await nextFrame(view, 2000))) {
@@ -560,6 +562,17 @@
         setTimeout(function () { rej(tagged('応答がありません', 'timeout')); }, ms);
       }),
     ]);
+  }
+
+  /* 映像が本当に対象要素の範囲になっているかを縦横比で確かめる。
+     restrictTo / cropTo は成功を返しても絞り込みが効いていないことがあり、
+     それを見逃すと範囲外（模範解答など）が録画に入ってしまう。 */
+  function geometryMatches(view, el) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || !view.videoWidth || !view.videoHeight) return false;
+    const want = r.width / r.height;
+    const got = view.videoWidth / view.videoHeight;
+    return Math.abs(want - got) / want < 0.04;
   }
 
   // 次のフレームが実際に届くかを確かめる。
