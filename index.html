@@ -601,6 +601,39 @@ async function startExam(key){
   await startRecording();
 }
 
+function logMove(to, how){
+  if (!state.log || to === state.cur) return;
+  state.log.add('move', { from: state.cur + 1, to: to + 1, how: how });
+}
+
+/* 受験中の操作を広く記録する。
+   模範解答そのものは渡さず、受験者が何をしたかだけを残す。 */
+function watchActivity(){
+  const on = function(target, type, fn, opt){ target.addEventListener(type, fn, opt || false); };
+  const live = function(){ return state.log && $('screen-exam').classList.contains('on'); };
+
+  on(document, 'visibilitychange', function(){
+    if (live()) state.log.add(document.hidden ? 'blur' : 'focus', {});
+  });
+  on(window, 'blur',  function(){ if (live()) state.log.add('winblur', {}); });
+  on(window, 'focus', function(){ if (live()) state.log.add('winfocus', {}); });
+  on(window, 'resize', function(){
+    if (live()) state.log.add('resize', { w: window.innerWidth, h: window.innerHeight });
+  });
+  on(document, 'copy', function(){ if (live()) state.log.add('copy', {}); });
+  on(document, 'cut',  function(){ if (live()) state.log.add('cut', {}); });
+  on(document, 'contextmenu', function(){ if (live()) state.log.add('menu', {}); });
+  on(document, 'keydown', function(e){
+    if (!live()) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && /^[cvxazsfpu]$/i.test(e.key)) state.log.add('key', { k: (e.metaKey ? 'Cmd+' : 'Ctrl+') + e.key.toUpperCase() });
+    else if (/^F(1[12]|[1-9])$/.test(e.key)) state.log.add('key', { k: e.key });
+    else if (e.key === 'Escape') state.log.add('key', { k: 'Esc' });
+  });
+  on(document, 'mouseleave', function(){ if (live()) state.log.add('out', {}); });
+}
+watchActivity();
+
 /* 抜いた解答欄に、受験者が入力した内容だけを描き直す。
    模範解答（薄い文字）は描かないので録画には残らない。 */
 function paintAnswerField(ctx, hole, scale){
@@ -648,7 +681,8 @@ async function startRecording(){
   let screen = null;
   if (C.RECORD_SCREEN && state.caps.screen !== 'none'){
     try{
-      screen = await SC.startScreenCapture($('ex-capture'));
+      const wide = C.RECORD_AREA !== 'card';
+      screen = await SC.startScreenCapture($('ex-capture'), { narrow: !wide });
       state.screenStop = screen.stop;
       state.screenMode = screen.mode;
       state.log.add('screen_on', { mode: screen.mode });
@@ -695,17 +729,18 @@ async function startRecording(){
         await new Promise(function(r){ setTimeout(r, 120); });
       }
     }
-    // 受験カードの範囲だけを描き、模範解答は描画から除外する
-    const cropped = !!(screen && screen.mode !== 'manual');
-    const clipEl = (screen && screen.mode === 'manual') ? $('ex-capture') : null;
+    // 録画する範囲。tab のときは全面、card のときは受験カードだけ
+    const wideRec = !screen || screen.mode === 'tab';
+    const cropped = !!(screen && screen.mode !== 'manual' && screen.mode !== 'tab');
+    const areaEl = (screen && !wideRec) ? $('ex-capture') : null;
 
     // 撮影範囲の縦横比に合わせる。黒帯が出ないぶん同じ容量でも精細になる
     let cw = C.RECORD_CANVAS_W, ch = C.RECORD_CANVAS_H;
     if (screen && screen.video && screen.video.videoWidth){
       const vw = screen.video.videoWidth, vh = screen.video.videoHeight;
       let rw = vw, rh = vh;
-      if (clipEl){
-        const r = clipEl.getBoundingClientRect();
+      if (areaEl && !cropped){
+        const r = areaEl.getBoundingClientRect();
         rw = Math.round(r.width * vw / (window.innerWidth || 1));
         rh = Math.round(r.height * vh / (window.innerHeight || 1));
       }
@@ -719,7 +754,7 @@ async function startRecording(){
     cw += cw % 2; ch += ch % 2;   // エンコーダの都合で偶数にする
     state.composer = SC.createComposer(screen && screen.video, cam, {
       width: cw, height: ch, fps: C.RECORD_FPS,
-      areaEl: screen ? $('ex-capture') : null,
+      areaEl: areaEl,
       cropped: cropped,
       maskPad: 4,
       maskEl: function(){
@@ -792,7 +827,7 @@ function renderQ(){
     return '<button class="dot'+(isAnswered(i)?' answered':'')+(i===state.cur?' cur':'')+'" data-i="'+i+'">'+(i+1)+'</button>';
   }).join('');
   Array.prototype.forEach.call($('ex-dots').querySelectorAll('.dot'), function(b){
-    b.onclick = function(){ state.cur = +b.dataset.i; renderQ(); };
+    b.onclick = function(){ logMove(+b.dataset.i, '番号'); state.cur = +b.dataset.i; renderQ(); };
   });
   $('btn-prev').disabled = state.cur === 0;
   syncSubmit();
@@ -880,7 +915,14 @@ async function submitExam(){
       code_total: codeRows.length, review_status: codeRows.length ? 'pending' : 'none',
       video_path: videoPath, video_mime: state.recMime || null,
       video_bytes: recBlob ? recBlob.size : null,
-      answers: g.details.map(function(d){ return { qid:d.qid, picked:d.picked, ok:d.ok }; }),
+      answers: g.details.map(function(d){
+        return {
+          qid: d.qid, q: d.q, ok: d.ok, picked: d.picked,
+          chosen:  d.picked == null ? null : d.choices[d.picked],
+          correct: d.choices[d.answer],
+          exp: d.exp || '',
+        };
+      }),
     });
     resultId = row && row.id ? row.id : null;
   }catch(e){
@@ -1003,8 +1045,8 @@ $('in-name').addEventListener('input', checkName);
 $('in-birth').addEventListener('input', checkBirth);
 $('in-birth').addEventListener('change', checkBirth);
 $('btn-start').onclick = function(){ renderLangs(); show('screen-langs'); };
-$('btn-prev').onclick  = function(){ if(state.cur>0){ state.cur--; renderQ(); } };
-$('btn-next').onclick  = function(){ if(state.cur<state.exam.length-1){ state.cur++; renderQ(); } };
+$('btn-prev').onclick  = function(){ if(state.cur>0){ logMove(state.cur-1, '前へ'); state.cur--; renderQ(); } };
+$('btn-next').onclick  = function(){ if(state.cur<state.exam.length-1){ logMove(state.cur+1, '次へ'); state.cur++; renderQ(); } };
 $('btn-submit').onclick = submitExam;
 /* 画面共有を断られた場合に録り直す。ユーザー操作が無いと許可を求められないためボタンにしている */
 $('btn-rescreen').onclick = async function(){
@@ -1023,12 +1065,6 @@ $('btn-back').onclick  = function(){ renderLangs(); show('screen-langs'); };
 window.addEventListener('beforeunload', function(){
   SC.closeCamera(state.camStream);
   if (state.screenStop) state.screenStop();
-});
-/* 画面を離れた記録（別タブへの移動検知） */
-document.addEventListener('visibilitychange', function(){
-  if (state.log && $('screen-exam').classList.contains('on')){
-    state.log.add(document.hidden ? 'blur' : 'focus', {});
-  }
 });
 
 $('note-count').textContent = C.CHOICE_COUNT + C.CODE_COUNT;

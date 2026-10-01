@@ -95,6 +95,28 @@ tbody tr:hover{background:#f7faff}
   line-height:1.65;white-space:pre;overflow:auto;max-height:230px;background:#fbfcfe}
 .replay input[type=range]{width:100%;margin:0;accent-color:var(--blue)}
 .replay-ctl{padding:10px 13px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+/* 操作履歴 */
+.hist{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.hist-head{padding:9px 13px;background:#f6f8fc;font-size:12px;font-weight:700;color:var(--muted);
+  display:flex;gap:10px;align-items:center}
+.hist-head span{margin-left:auto;font-weight:400}
+.hist ol{margin:0;padding:0;list-style:none;max-height:300px;overflow:auto;background:#fff}
+.hist li{display:flex;gap:10px;padding:7px 13px;font-size:12px;border-top:1px solid #f0f3f8}
+.hist li:first-child{border-top:none}
+.hist li b{flex:none;width:58px;color:var(--muted);font-weight:400;font-variant-numeric:tabular-nums}
+.hist li.warn{background:#fff7ed}
+.hist li.warn span{color:#b4730c;font-weight:700}
+
+/* 選択式の解答 */
+.cq{border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.cq-head{padding:11px 14px;background:#f7f9fd;font-size:13.5px;font-weight:700;display:flex;gap:10px;align-items:center}
+.cq-head .m{margin-left:auto;font-size:11.5px;font-weight:800;border-radius:999px;padding:3px 10px}
+.cq-head .m.o{background:#e3f6ee;color:var(--ok)} .cq-head .m.x{background:#fdeaea;color:var(--ng)}
+.cq-body{padding:11px 14px;font-size:13px}
+.cq-body div{margin-top:4px}
+.cq-body .yours{color:var(--ng)} .cq-body .right{color:var(--ok);font-weight:700}
+.sec{font-size:12px;font-weight:700;color:var(--muted);margin:0 0 9px}
+
 .ans{border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
 .ans-h{padding:11px 14px;background:#f7f9fd;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .ans-h b{font-size:13.5px}
@@ -197,8 +219,13 @@ tbody tr:hover{background:#f7faff}
             <input type="range" id="p-rseek" min="0" value="0">
           </div>
         </div>
+        <div class="hist" id="p-hist" style="display:none">
+          <div class="hist-head">操作履歴<span id="p-hist-n"></span></div>
+          <ol id="p-hist-list"></ol>
+        </div>
       </div>
       <div>
+        <div id="p-choice"></div>
         <div id="p-answers"></div>
         <div class="p-total" id="p-total"></div>
         <div class="btn-row" style="display:flex;gap:10px">
@@ -445,6 +472,8 @@ async function openPanel(resultId){
     P.events = (logs[0] && logs[0].events) || [];
   }catch(e){ P.events = []; }
   setupReplay();
+  renderHistory();
+  renderChoiceAnswers();
 
   await loadVideo(row);
 }
@@ -506,6 +535,88 @@ function renderTotal(){
       + '<span class="pill ' + (t.passed ? 'p' : 'f') + '">' + (t.passed ? '合格' : '不合格') + '</span>'
     : '<span>未採点が ' + (ids.length - scored.length) + ' 問あります。すべて採点すると合計点が出ます（選択式 '
       + (P.row.score||0) + ' / ' + choiceMaxOf(P.row) + '点）</span>';
+}
+
+/* 操作履歴の表示 */
+const EV_JA = {
+  open:     ['受験を開始', 0],
+  move:     ['問題を移動', 0],
+  choice:   ['選択式に解答', 0],
+  code:     ['記述を編集', 0],
+  reset:    ['入力をクリア', 0],
+  paste:    ['貼り付け', 1],
+  copy:     ['コピー', 1],
+  cut:      ['切り取り', 1],
+  menu:     ['右クリック', 1],
+  key:      ['ショートカット', 1],
+  out:      ['画面の外へ移動', 1],
+  blur:     ['別のタブへ移動', 1],
+  focus:    ['受験画面に戻る', 0],
+  winblur:  ['別のウィンドウへ移動', 1],
+  winfocus: ['ウィンドウに戻る', 0],
+  resize:   ['画面サイズを変更', 1],
+  submit:   ['解答を提出', 0],
+  rec_start:['録画を開始', 0],
+  screen_on:['画面の録画を開始', 0],
+  screen_off:['画面の録画なし', 1],
+  cam_fail: ['カメラの取得に失敗', 1],
+  rec_fail: ['録画の開始に失敗', 1],
+  rec_result:['録画を終了', 0],
+  upload_ok:['録画を送信', 0],
+  upload_fail:['録画の送信に失敗', 1],
+  rescreen: ['画面の録画をやり直し', 1],
+};
+
+function evDetail(e){
+  if (e.type === 'move')   return '第' + e.from + '問 → 第' + e.to + '問（' + (e.how || '') + '）';
+  if (e.type === 'choice') return e.qid + ' / ' + String.fromCharCode(65 + (e.i || 0));
+  if (e.type === 'code')   return e.qid + ' / ' + String(e.v || '').split('\n').length + '行';
+  if (e.type === 'key')    return e.k || '';
+  if (e.type === 'resize') return e.w + '×' + e.h;
+  if (e.type === 'submit') return e.left ? '未回答 ' + e.left + '問' : '全問回答';
+  if (e.type === 'open')   return e.lang + ' / 全' + e.total + '問';
+  if (e.type === 'screen_on') return e.mode;
+  if (e.type === 'screen_off') return e.msg || e.code || '';
+  if (e.type === 'rec_result') return Math.round((e.bytes || 0) / 1024) + 'KB';
+  if (e.type === 'upload_fail') return 'コード ' + e.status;
+  return '';
+}
+
+function renderHistory(){
+  const ev = P.events || [];
+  if (!ev.length){ $('p-hist').style.display = 'none'; return; }
+  $('p-hist').style.display = '';
+  const warn = ev.filter(function(e){ const m = EV_JA[e.type]; return m && m[1]; }).length;
+  $('p-hist-n').textContent = ev.length + '件' + (warn ? ' ／ 注意 ' + warn + '件' : '');
+  $('p-hist-list').innerHTML = ev.map(function(e){
+    const m = EV_JA[e.type] || [e.type, 0];
+    const d = evDetail(e);
+    return '<li class="' + (m[1] ? 'warn' : '') + '"><b>' + fmtDur(e.t) + '</b>'
+         + '<span>' + esc(m[0]) + '</span>'
+         + (d ? '<em style="color:#5f6f92;font-style:normal">' + esc(d) + '</em>' : '') + '</li>';
+  }).join('');
+}
+
+/* 選択式の解答 */
+function renderChoiceAnswers(){
+  const rows = (P.row && P.row.answers) || [];
+  if (!rows.length){ $('p-choice').innerHTML = ''; return; }
+  const okN = rows.filter(function(a){ return a.ok; }).length;
+  $('p-choice').innerHTML = '<p class="sec">選択式　' + okN + ' / ' + rows.length + '問正解</p>'
+    + rows.map(function(a, i){
+      const yours = a.chosen == null ? '未回答' : a.chosen;
+      return '<div class="cq">'
+        + '<div class="cq-head"><span>Q' + (i + 1) + '. ' + esc(a.q || a.qid) + '</span>'
+        + '<span class="m ' + (a.ok ? 'o' : 'x') + '">' + (a.ok ? '正解' : '不正解') + '</span></div>'
+        + '<div class="cq-body">'
+        + (a.ok
+            ? '<div class="right">解答：' + esc(yours) + '</div>'
+            : '<div class="yours">解答：' + esc(yours) + '</div>'
+              + '<div class="right">正解：' + esc(a.correct || '') + '</div>')
+        + (a.exp ? '<div style="color:#5f6f92;font-size:12px;margin-top:7px">' + esc(a.exp) + '</div>' : '')
+        + '</div></div>';
+    }).join('')
+    + '<p class="sec" style="margin-top:18px">記述式</p>';
 }
 
 /* 録画が残っていない理由をログから拾う */
@@ -616,8 +727,9 @@ async function downloadVideo(resultId, btn){
 
 /* ---- 操作ログの再生 ---- */
 function setupReplay(){
-  const codes = P.events.filter(function(e){ return e.type === 'code'; });
   if (!P.events.length){ $('p-replay').style.display = 'none'; return; }
+  // 時刻順に並べ替える。順序が乱れていると再生が途中で止まるため
+  P.events.sort(function(a, b){ return (a.t || 0) - (b.t || 0); });
   $('p-replay').style.display = '';
   const maxT = P.events[P.events.length - 1].t || 0;
   const seek = $('p-rseek');

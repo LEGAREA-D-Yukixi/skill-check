@@ -638,17 +638,26 @@
        範囲や除外位置を特定できない場合は何も描かず、安全側に倒す。 */
     function drawScreen(video) {
       const vw = video.videoWidth, vh = video.videoHeight;
-      if (!vw || !vh || !areaEl) return;
-      const er = areaEl.getBoundingClientRect();
-      if (!er.width || !er.height) return;
+      if (!vw || !vh) return;
+      const iw = window.innerWidth || 0, ih = window.innerHeight || 0;
+      if (!iw || !ih) return;
 
-      // 映像が写している範囲。絞り込み済みならカード、そうでなければ表示領域全体
-      let base;
-      if (cropped) base = er;
-      else {
-        const iw = window.innerWidth || 0, ih = window.innerHeight || 0;
-        if (!iw || !ih) return;
+      // 映像が写している範囲。絞り込み済みなら対象要素、そうでなければ表示領域全体
+      let base, src;
+      if (areaEl && cropped) {
+        base = areaEl.getBoundingClientRect();
+        if (!base.width || !base.height) return;
+        src = { x: 0, y: 0, w: vw, h: vh };
+      } else {
         base = { left: 0, top: 0, width: iw, height: ih };
+        if (areaEl) {
+          const er = areaEl.getBoundingClientRect();
+          if (!er.width || !er.height) return;
+          src = { x: (er.left) * (vw / iw), y: (er.top) * (vh / ih),
+                  w: er.width * (vw / iw), h: er.height * (vh / ih) };
+        } else {
+          src = { x: 0, y: 0, w: vw, h: vh };
+        }
       }
       const kx = vw / base.width, ky = vh / base.height;
       const toVideo = function (r) {
@@ -656,7 +665,6 @@
                  w: r.width * kx, h: r.height * ky };
       };
 
-      const src = toVideo(er);
       const sx = Math.max(0, Math.floor(src.x));
       const sy = Math.max(0, Math.floor(src.y));
       const sw = Math.min(vw - sx, Math.ceil(src.w));
