@@ -128,20 +128,6 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 /* ===== テスト ===== */
 /* ===== 受験画面のレイアウト ===== */
 .exam-grid{display:block}
-.model-card{
-  margin:18px 0 30px;padding:14px 16px;border:1.5px solid var(--line);
-  box-shadow:0 2px 10px rgba(6,20,52,.1);
-}
-.model-head{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:800;margin-bottom:10px}
-.model-tag{
-  margin-left:auto;font-size:10.5px;font-weight:700;color:#8a6d1f;background:#fdf1d4;
-  border:1px solid #f0d49a;border-radius:999px;padding:3px 10px;
-}
-.model-note{font-size:11.5px;color:var(--muted);margin-top:10px}
-
-
-.model-card .code-box{max-height:280px}
-
 /* 画面録画の対象。
    contain:paint が無いと Element Capture が映像を返さない。
    高さを固定するのは、問題ごとに大きさが変わると切り抜きサイズが変わり黒帯が出るため。 */
@@ -192,18 +178,30 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
   font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px;
   display:flex;align-items:center;gap:10px;
 }
-.code-box,.code-edit{
+.code-hint{margin-left:auto;font-weight:400;font-size:11.5px;color:var(--muted)}
+.code-before{
   font-family:"SFMono-Regular",Menlo,Consolas,"Noto Sans Mono CJK JP",monospace;
-  font-size:13.5px;line-height:1.72;tab-size:4;
-  border-radius:11px;padding:14px 16px;width:100%;
-  white-space:pre;overflow:auto;
+  font-size:13px;line-height:1.7;tab-size:4;white-space:pre;overflow:auto;
+  background:#eef3fa;border:1.5px solid #d7e2f1;border-radius:11px;
+  padding:12px 15px;color:#4a5f82;max-height:170px;margin:0;
 }
-.code-box{background:#eef3fa;border:1.5px solid #d7e2f1;color:#1d3356;max-height:440px}
+.edit-stack{position:relative;height:260px}
+.code-ghost,.code-edit{
+  font-family:"SFMono-Regular",Menlo,Consolas,"Noto Sans Mono CJK JP",monospace;
+  font-size:13.5px;line-height:1.72;tab-size:4;letter-spacing:0;
+  border:1.5px solid var(--line);border-radius:11px;padding:14px 16px;
+  width:100%;height:100%;white-space:pre;overflow:auto;
+}
+/* 薄い文字の模範解答。入力欄の背後に敷く */
+.code-ghost{
+  position:absolute;inset:0;margin:0;color:#a6b2c6;background:#fbfcfe;
+  pointer-events:none;user-select:none;
+}
 .code-edit{
-  background:#fbfcfe;border:1.5px solid var(--line);color:var(--ink);
-  min-height:180px;resize:vertical;display:block;
+  position:relative;background:transparent;color:var(--ink);
+  resize:none;display:block;caret-color:var(--blue);
 }
-.code-edit:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12);background:#fff}
+.code-edit:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12)}
 
 /* ===== 録画インジケータ ===== */
 .rec{
@@ -334,21 +332,24 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 
           <div class="code-wrap" id="ex-code" style="display:none">
             <div class="code-task" id="ex-task"></div>
-
-            <!-- 模範解答：canvas のクリップで録画から除外する -->
-            <aside class="card model-card" id="ex-model-card">
-              <div class="model-head"><span>模範解答</span><span class="model-tag">録画されません</span></div>
-              <pre class="code-box" id="ex-model"></pre>
-              <p class="model-note">このとおりに下の解答欄へ入力してください。</p>
-            </aside>
+            <div class="code-panel">
+              <div class="code-label">修正前のコード</div>
+              <pre class="code-before" id="ex-before"></pre>
+            </div>
 
             <div class="code-panel">
-              <div class="code-label">解答欄</div>
-              <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
-                        autocomplete="off" autocorrect="off" wrap="off"></textarea>
+              <div class="code-label">解答欄
+                <span class="code-hint">薄い文字が模範解答です。上からなぞって入力してください</span>
+              </div>
+              <!-- 模範解答は薄い文字として重ねる。録画時は canvas で抜き、入力内容だけ描き直す -->
+              <div class="edit-stack" id="ex-stack">
+                <pre class="code-ghost" id="ex-model" aria-hidden="true"></pre>
+                <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
+                          autocomplete="off" autocorrect="off" wrap="off"></textarea>
+              </div>
             </div>
             <div class="btn-row" style="margin-top:12px">
-              <button class="btn btn-ghost" id="btn-reset-code" style="flex:0 0 auto">元のコードに戻す</button>
+              <button class="btn btn-ghost" id="btn-reset-code" style="flex:0 0 auto">入力をクリア</button>
             </div>
           </div>
 
@@ -514,9 +515,10 @@ function renderChoiceQ(item, n){
    模範解答は画面に出しますが、操作ログには一切渡しません。 */
 function renderCodeQ(item){
   $('ex-task').textContent = item.task;
-  $('ex-model').textContent = item.answer;     // 表示のみ。ログには渡さない
+  $('ex-before').textContent = item.code;
+  $('ex-model').textContent = item.answer;     // 薄い文字で重ねる。ログには渡さない
   const ed = $('ex-edit');
-  ed.value = state.answers[state.cur] == null ? item.code : state.answers[state.cur];
+  ed.value = state.answers[state.cur] == null ? '' : state.answers[state.cur];
   ed.oninput = null;
   state.log.resetSnapshot();
   ed.oninput = function(){
@@ -525,19 +527,25 @@ function renderCodeQ(item){
     refreshDots();
   };
   ed.onpaste = function(){ state.log.add('paste', { qid:item.qid }); };
+  ed.onscroll = function(){
+    const g = $('ex-model');
+    g.scrollTop = ed.scrollTop; g.scrollLeft = ed.scrollLeft;
+  };
+  ed.scrollTop = 0; $('ex-model').scrollTop = 0;
   $('btn-reset-code').onclick = function(){
-    ed.value = item.code;
-    state.answers[state.cur] = item.code;
+    ed.value = '';
+    state.answers[state.cur] = '';
     state.log.add('reset', { qid:item.qid });
-    state.log.snapshot(item.qid, item.code);
+    state.log.snapshot(item.qid, '');
     refreshDots();
+    ed.focus();
   };
 }
 
 /* 回答済みかどうか。記述式は元コードから変化していれば回答済みとみなす */
 function isAnswered(i){
   const q = state.exam[i];
-  if (q.kind === 'code') return SC.normalizeCode(state.answers[i]) !== SC.normalizeCode(q.code);
+  if (q.kind === 'code') return SC.normalizeCode(state.answers[i]).length > 0;
   return state.answers[i] != null;
 }
 function unansweredIdx(){
@@ -580,7 +588,7 @@ async function startExam(key){
   if (!exam.length){ toast('この言語の問題はまだ登録されていません'); return; }
   state.lang = lang;
   state.exam = exam;
-  state.answers = exam.map(function(q){ return q.kind === 'code' ? q.code : null; });
+  state.answers = exam.map(function(q){ return q.kind === 'code' ? '' : null; });
   state.cur = 0; state.startedAt = Date.now();
   state.log = SC.createLogger();
   state.log.add('open', { lang: key, total: exam.length });
@@ -593,6 +601,39 @@ async function startExam(key){
   // await を挟まないので、画面共有の許可を求める権利は維持される。
   ensureSession();
   await startRecording();
+}
+
+/* 抜いた解答欄に、受験者が入力した内容だけを描き直す。
+   模範解答（薄い文字）は描かないので録画には残らない。 */
+function paintAnswerField(ctx, hole, scale){
+  const ed = $('ex-edit');
+  if (!ed) return;
+  const cs = getComputedStyle(ed);
+  const fs = parseFloat(cs.fontSize) || 13.5;
+  const lh = parseFloat(cs.lineHeight) || fs * 1.72;
+  const pl = parseFloat(cs.paddingLeft) || 16;
+  const pt = parseFloat(cs.paddingTop) || 14;
+
+  // 枠と地色
+  ctx.fillStyle = '#fbfcfe';
+  ctx.fillRect(hole.x, hole.y, hole.w, hole.h);
+  ctx.strokeStyle = '#dde5f2';
+  ctx.lineWidth = Math.max(1, 1.5 * scale);
+  ctx.strokeRect(hole.x + 1, hole.y + 1, hole.w - 2, hole.h - 2);
+
+  // 入力内容
+  ctx.fillStyle = '#16223f';
+  ctx.font = (fs * scale) + 'px ' + cs.fontFamily;
+  ctx.textBaseline = 'top';
+  const lines = String(ed.value || '').replace(/\t/g, '    ').split('\n');
+  const x = hole.x + (pl - ed.scrollLeft) * scale;
+  const top = hole.y + (pt - ed.scrollTop) * scale;
+  for (let i = 0; i < lines.length; i++){
+    const y = top + i * lh * scale;
+    if (y > hole.y + hole.h) break;
+    if (y + lh * scale < hole.y) continue;
+    ctx.fillText(lines[i], x, y);
+  }
 }
 
 /* ---- 録画 ----
@@ -682,11 +723,14 @@ async function startRecording(){
       width: cw, height: ch, fps: C.RECORD_FPS,
       areaEl: screen ? $('ex-capture') : null,
       cropped: cropped,
+      maskPad: 4,
       maskEl: function(){
-        // 記述問題を表示している間だけ、模範解答を描画から除外する
-        const card = $('ex-model-card');
-        return (card && card.offsetHeight > 0 && $('ex-code').style.display !== 'none') ? card : null;
+        // 記述問題を表示している間だけ、解答欄を描画から除外する。
+        // 模範解答は薄い文字として重なっているため、まとめて抜いたうえで入力内容を描き直す。
+        const st = $('ex-stack');
+        return (st && st.offsetHeight > 0 && $('ex-code').style.display !== 'none') ? st : null;
       },
+      paintMask: paintAnswerField,
     });
     state.composer.start();
     // 映像が流れ始めるのを待ってから録画を開始する（空の動画を防ぐ）

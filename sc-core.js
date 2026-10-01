@@ -625,6 +625,7 @@
     const areaEl  = o.areaEl || null;   // 録画してよい範囲
     const cropped = !!o.cropped;        // ブラウザ側で既に絞り込み済みか
     const maskEl  = o.maskEl || null;   // 録画から除外する要素を返す関数
+    const paintMask = o.paintMask || null;  // 除外した場所に描き直す処理（任意）
     const cvid = camStream ? videoFrom(camStream) : null;
     let timer = null;
 
@@ -673,7 +674,7 @@
         const mr = me.getBoundingClientRect();
         if (!mr.width || !mr.height) return;   // 位置を特定できない＝描かない
         const v = toVideo(mr);
-        const pad = 22 * Math.min(kx, ky) * s;   // 影や丸みの分の余白
+        const pad = (o.maskPad == null ? 22 : o.maskPad) * Math.min(kx, ky) * s;
         holes.push({
           x: dx + (v.x - sx) * s - pad,
           y: dy + (v.y - sy) * s - pad,
@@ -692,11 +693,21 @@
       ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
       ctx.restore();
 
-      // 穴はカードの地色で埋める
+      // 抜いた場所は地色で埋め、必要なら呼び出し側に描き直してもらう
       if (holes.length) {
         ctx.fillStyle = o.maskFill || '#ffffff';
         for (let i = 0; i < holes.length; i++) {
           ctx.fillRect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
+        }
+        if (paintMask) {
+          for (let i = 0; i < holes.length; i++) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
+            ctx.clip();
+            try { paintMask(ctx, holes[i], Math.min(kx, ky) * s); } catch (e) {}
+            ctx.restore();
+          }
         }
       }
     }
