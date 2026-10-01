@@ -124,6 +124,8 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 }
 
 /* ===== テスト ===== */
+/* 画面録画の対象。contain:paint が無いと Element Capture が映像を返さない */
+#ex-capture{contain:paint}
 .exam-head{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:16px 22px;background:linear-gradient(135deg,var(--navy-700),var(--navy-900));color:#fff;
@@ -313,7 +315,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
               <pre class="code-box" id="ex-model"></pre>
             </div>
             <div class="code-panel">
-              <div class="code-label">解答欄（上のとおりに入力してください）</div>
+              <div class="code-label">解答欄</div>
               <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
                         autocomplete="off" autocorrect="off" wrap="off"></textarea>
             </div>
@@ -370,7 +372,7 @@ const $   = function(id){ return document.getElementById(id); };
 const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
   caps:null, consent:false, camId:'',
-  composer:null, screenStop:null, recKind:'',
+  composer:null, screenStop:null, recKind:'', recNote:'',
   log:null, rec:null, camStream:null, recBlob:null, recMime:'',
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
@@ -557,30 +559,22 @@ async function startExam(key){
   // 画面共有の許可はタップ直後でないと求められないため、通信は後回しにする。
   $('ex-lang').textContent = lang.label;
   show('screen-exam'); renderQ();
-  await startRecording();
+  // 受験者情報の保存は待たずに始める（共有ダイアログの応答待ちで止めないため）。
+  // await を挟まないので、画面共有の許可を求める権利は維持される。
   ensureSession();
+  await startRecording();
 }
 
 /* ---- 録画 ----
    画面は #ex-capture の範囲だけを撮り、模範解答カードは撮影対象から外します。
    範囲を絞れないブラウザでは画面を撮らず、カメラのみで録画します。 */
 async function startRecording(){
-  state.recBlob = null; state.recMime = ''; state.recKind = '';
-  if (!C.RECORD || !state.consent){ setRecBadge(false, '録画なし'); return; }
-  if (!SC.canRecord()){ setRecBadge(false, '録画非対応'); return; }
+  state.recBlob = null; state.recMime = ''; state.recKind = ''; state.recNote = '';
+  if (!C.RECORD || !state.consent){ setRecBadge(false, '録画なし'); state.recNote = '同意なし'; return; }
+  if (!SC.canRecord()){ setRecBadge(false, '録画非対応'); state.recNote = 'この端末は録画に対応していません'; return; }
 
-  // カメラ
-  let cam = null;
-  try{
-    cam = await SC.openCameraStream(state.camId, { width: C.RECORD_WIDTH, fps: C.RECORD_FPS });
-    state.camStream = cam;
-  }catch(e){
-    console.error('[SkillCheck] camera failed', e && e.name);
-    state.log.add('cam_fail', { name: e && e.name });
-    toast(SC.jaCameraError(e));
-  }
-
-  // 画面（模範解答を除外できる場合のみ）
+  // 1. 画面共有を最初に求める。
+  //    許可ダイアログはタップ直後の短い間しか出せないため、カメラより先に呼ぶ必要がある。
   let screen = null;
   if (C.RECORD_SCREEN && state.caps.screen !== 'none' && state.caps.screen !== 'unrestricted'){
     try{
@@ -589,22 +583,37 @@ async function startRecording(){
       state.log.add('screen_on', { mode: screen.mode });
     }catch(e){
       console.error('[SkillCheck] screen capture failed', e && e.code, e && e.message);
-      state.log.add('screen_off', { code: e && e.code });
-      if (e && (e.code === 'wrong-surface' || e.code === 'denied')) toast(e.message);
+      state.log.add('screen_off', { code: e && e.code, msg: e && e.message });
+      state.recNote = '画面録画なし（' + (e && e.message ? e.message : '不明') + '）';
+      toast(e && e.message ? e.message : '画面を録画できません');
     }
   } else if (C.RECORD_SCREEN){
     state.log.add('screen_off', { code: 'unsupported' });
+    state.recNote = '画面録画なし（このブラウザは非対応）';
     toast('このブラウザは画面録画に対応していません。カメラのみ録画します');
+  }
+
+  // 2. カメラ
+  let cam = null;
+  try{
+    cam = await SC.openCameraStream(state.camId, { width: C.RECORD_WIDTH, fps: C.RECORD_FPS });
+    state.camStream = cam;
+  }catch(e){
+    console.error('[SkillCheck] camera failed', e && e.name);
+    state.log.add('cam_fail', { name: e && e.name });
+    state.recNote = (state.recNote ? state.recNote + ' / ' : '') + 'カメラなし（' + SC.jaCameraError(e) + '）';
+    toast(SC.jaCameraError(e));
   }
 
   if (!cam && !screen){
     setRecBadge(false, '録画できません');
+    state.recNote = state.recNote || 'カメラも画面も取得できませんでした';
     toast('カメラも画面も取得できなかったため録画しません');
     return;
   }
 
   try{
-    state.composer = SC.createComposer(screen && screen.stream, cam, {
+    state.composer = SC.createComposer(screen && screen.video, cam, {
       width: C.RECORD_CANVAS_W, height: C.RECORD_CANVAS_H, fps: C.RECORD_FPS,
     });
     state.composer.start();
@@ -621,6 +630,7 @@ async function startRecording(){
   }catch(e){
     console.error('[SkillCheck] recorder failed', e && e.name, e && e.message);
     setRecBadge(false, '録画できません');
+    state.recNote = (state.recNote ? state.recNote + ' / ' : '') + '録画を開始できませんでした';
     toast('録画を開始できませんでした');
     state.log.add('rec_fail', { name: e && e.name });
   }
@@ -692,13 +702,14 @@ async function submitExam(){
 
   const dur = Date.now() - state.startedAt;
   const recBlob = await stopRecording();
+  window.__lastRecBlob = recBlob;   /* 検証用 */
 
   // 選択式のみ自動採点。記述式は管理画面での目視レビュー
   const choiceIdx = [];
   state.exam.forEach(function(q,i){ if (q.kind !== 'code') choiceIdx.push(i); });
   const cExam = choiceIdx.map(function(i){ return state.exam[i]; });
   const cAns  = choiceIdx.map(function(i){ return state.answers[i]; });
-  const g = SC.gradeExam(cExam, cAns, C.PASS_LINE);
+  const g = SC.gradeExam(cExam, cAns, C.PASS_LINE, C.CHOICE_POINT);
 
   const codeRows = [];
   state.exam.forEach(function(q,i){
@@ -716,7 +727,7 @@ async function submitExam(){
   // 1. 録画をストレージへ
   let videoPath = null;
   if (C.RECORD && state.consent && (!recBlob || !recBlob.size)){
-    notes.push('録画を保存できませんでした');
+    notes.push('録画を保存できませんでした' + (state.recNote ? '：' + state.recNote : ''));
   }
   if (recBlob && recBlob.size && SC.sbReady()){
     try{
@@ -763,6 +774,11 @@ async function submitExam(){
 
   // 4. 操作ログ
   try{
+    state.log.add('rec_result', {
+      kind: state.recKind || 'なし',
+      bytes: recBlob ? recBlob.size : 0,
+      note: state.recNote || '',
+    });
     await SC.saveLog({
       result_id: resultId, session_id: state.sessionId, lang_key: state.lang.key,
       started_at: state.log.startedAt, duration_ms: dur, events: state.log.dump(),
@@ -794,7 +810,7 @@ function renderResult(g, dur, codeRows){
   $('rs-verdict').textContent = hasCode ? '選択式の得点' : (g.passed ? '合格ライン到達' : '合格ライン未到達');
   $('rs-score').textContent = g.score;
   $('rs-unit').textContent = ' / ' + g.max + '点';
-  $('rs-meta').textContent = state.lang.label + ' ／ 選択式は1問1点（' + g.correct + '問正解）'
+  $('rs-meta').textContent = state.lang.label + ' ／ 選択式は1問' + C.CHOICE_POINT + '点（' + g.correct + ' / ' + g.total + '問正解）'
     + (hasCode ? ' ／ 記述式 ' + codeRows.length + '問は担当者が確認します' : '')
     + ' ／ 所要 ' + SC.formatDuration(dur);
   $('rs-rank').textContent = hasCode

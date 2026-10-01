@@ -125,9 +125,10 @@
      answers : 選択したインデックスの配列（未回答は null）
      --------------------------------------------------------- */
 
-  // 選択式は1問1点。score は正解数そのもの、pct は百分率
-  function gradeExam(exam, answers, passLine) {
+  // 選択式の採点。pointPer は1問あたりの配点（既定10点）
+  function gradeExam(exam, answers, passLine, pointPer) {
     const line = typeof passLine === 'number' ? passLine : 70;
+    const per = pointPer == null ? 10 : pointPer;
     const total = exam.length;
     const details = exam.map(function (item, i) {
       const picked = (answers && answers[i] != null) ? answers[i] : null;
@@ -146,8 +147,9 @@
     return {
       total: total,
       correct: correct,
-      score: correct,     // 1問1点
-      max: total,
+      score: correct * per,
+      max: total * per,
+      pointPer: per,
       pct: pct,
       passed: pct >= line,
       passLine: line,
@@ -509,22 +511,74 @@
       throw tagged('共有の選択で「このタブ」を選んでください', 'wrong-surface');
     }
 
-    let mode = '';
-    try {
-      if (window.RestrictionTarget && track.restrictTo) {
-        await track.restrictTo(await window.RestrictionTarget.fromElement(el));
-        mode = 'element';
-      } else if (window.CropTarget && track.cropTo) {
-        await track.cropTo(await window.CropTarget.fromElement(el));
-        mode = 'region';
-      }
-    } catch (e) { mode = ''; }
+    // 受け手が一度もなくなるとタブキャプチャは止まるため、
+    // 検証用の video をそのまま合成でも使い回す（破棄しない）。
+    const view = videoFrom(stream);
+    const stopAll = function () { removeVideo(view); stop(); };
 
-    if (!mode) {
-      stop();
-      throw tagged('このブラウザでは模範解答を録画から除外できません', 'no-restrict');
+    // まず素のまま映像が流れることを確かめる
+    if (!(await nextFrame(view, 4000))) {
+      stopAll();
+      throw tagged('画面の映像を取得できませんでした', 'no-frames');
     }
-    return { stream: stream, mode: mode, stop: stop };
+
+    // 撮影範囲を解答エリアに絞る。
+    // 対象要素が条件を満たさないと、成功を返したまま1フレームも届かないことがあるため、
+    // 絞ったあとに必ず映像を確かめ、駄目なら元に戻す。
+    // 解除の呼び出しが返らない場合もあるので、すべてタイムアウト付きで扱う。
+    let mode = 'full';
+    if (window.CropTarget && track.cropTo) {
+      try {
+        const target = await limit(window.CropTarget.fromElement(el), 3000);
+        await limit(track.cropTo(target), 3000);
+        if (await nextFrame(view, 2000)) mode = 'region';
+        else await limit(track.cropTo(null), 3000).catch(function () {});
+      } catch (e) { /* 次の方式を試す */ }
+    }
+    if (mode === 'full' && window.RestrictionTarget && track.restrictTo) {
+      try {
+        const target = await limit(window.RestrictionTarget.fromElement(el), 3000);
+        await limit(track.restrictTo(target), 3000);
+        if (await nextFrame(view, 2000)) mode = 'element';
+        else await limit(track.restrictTo(null), 3000).catch(function () {});
+      } catch (e) { /* タブ全体のまま録る */ }
+    }
+    // 絞り込みを解除した直後は映像が止まっていることがあるので最後に確認する
+    if (!(await nextFrame(view, 2000))) {
+      stopAll();
+      throw tagged('画面の映像が途切れました', 'no-frames');
+    }
+    // mode が 'full' のままでもタブの映像は流れているのでそのまま録画する
+    return { stream: stream, mode: mode, stop: stopAll, video: view };
+  }
+
+  // 応答が返らない呼び出しで止まらないようにする
+  function limit(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, rej) {
+        setTimeout(function () { rej(tagged('応答がありません', 'timeout')); }, ms);
+      }),
+    ]);
+  }
+
+  // 次のフレームが実際に届くかを確かめる。
+  // 絞り込みに失敗すると「成功を返したまま以後1フレームも来ない」ため、
+  // 寸法ではなくフレームの到着そのものを見る。
+  function nextFrame(video, ms) {
+    return new Promise(function (resolve) {
+      let done = false;
+      const finish = function (v) { if (!done) { done = true; resolve(v); } };
+      setTimeout(function () { finish(false); }, ms || 2000);
+      if (video.requestVideoFrameCallback) {
+        video.requestVideoFrameCallback(function () { finish(true); });
+        return;
+      }
+      const iv = setInterval(function () {
+        if (video.videoWidth > 0 && video.videoHeight > 0) { clearInterval(iv); finish(true); }
+      }, 100);
+      setTimeout(function () { clearInterval(iv); }, ms || 2000);
+    });
   }
 
   /* ---- 画面とカメラを1本の映像に合成する ---- */
@@ -547,13 +601,14 @@
     if (v.parentNode) v.parentNode.removeChild(v);
   }
 
-  function createComposer(screenStream, camStream, opts) {
+  // screenVideo は startScreenCapture が返した video 要素をそのまま渡す
+  function createComposer(screenVideo, camStream, opts) {
     const o = opts || {};
     const w = o.width || 720, h = o.height || 450, fps = o.fps || 5;
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
     const ctx = cv.getContext('2d');
-    const sv = screenStream ? videoFrom(screenStream) : null;
+    const sv = screenVideo || null;
     const cvid = camStream ? videoFrom(camStream) : null;
     let timer = null;
 
@@ -586,11 +641,13 @@
       stop: function () {
         if (timer) clearInterval(timer);
         timer = null;
-        removeVideo(sv); removeVideo(cvid);
+        removeVideo(cvid);   // 画面側の video は startScreenCapture の stop が片付ける
       },
-      // 映像が実際に流れているか（0バイト録画の検知用）
+      // 渡したストリームがすべて流れているか（空の録画や片方欠けを防ぐ）
       ready: function () {
-        return !!((sv && sv.videoWidth) || (cvid && cvid.videoWidth));
+        if (sv && !sv.videoWidth) return false;
+        if (cvid && !cvid.videoWidth) return false;
+        return !!(sv || cvid);
       },
     };
   }
@@ -665,7 +722,7 @@
         headers: {
           'apikey': c.SUPABASE_ANON_KEY,
           'Authorization': 'Bearer ' + c.SUPABASE_ANON_KEY,
-          'Content-Type': blob.type || 'application/octet-stream',
+          'Content-Type': String(blob.type || 'application/octet-stream').split(';')[0],
           'x-upsert': 'true',
         },
         body: blob,

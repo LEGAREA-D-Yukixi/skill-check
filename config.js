@@ -13,6 +13,7 @@ window.SC_CONFIG = {
   /* ---- 受験設定 ---- */
   CHOICE_COUNT: 4,         // 1言語あたりの選択式の出題数
   CODE_COUNT: 6,           // 1言語あたりの記述式（写経）の出題数
+  CHOICE_POINT: 10,        // 選択式1問あたりの配点
   CODE_MAX: 10,            // 記述式1問あたりの満点（管理画面で採点）
   PASS_LINE: 70,           // 合格ライン（合計点に対する割合％）
   SHUFFLE_QUESTIONS: true, // 問題順をシャッフル

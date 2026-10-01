@@ -86,7 +86,9 @@ tbody tr:hover{background:#f7faff}
 .panel-body{padding:22px;display:grid;grid-template-columns:330px 1fr;gap:22px;align-items:start}
 @media(max-width:900px){.panel-body{grid-template-columns:1fr}}
 .rec-box video{width:100%;border-radius:12px;background:#0b1730;display:block;transform:scaleX(-1)}
-.rec-empty{padding:28px;text-align:center;color:var(--muted);font-size:13px;background:#f5f7fb;border-radius:12px}
+.rec-empty{padding:24px 18px;text-align:center;color:var(--muted);font-size:13px;background:#f5f7fb;border-radius:12px;line-height:1.8}
+.rec-empty b{color:var(--ink);font-size:13.5px}
+.rec-kind{margin-top:8px;font-size:11.5px;color:var(--muted);text-align:center}
 .replay{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .replay-head{padding:9px 13px;background:#f6f8fc;font-size:12px;font-weight:700;color:var(--muted);display:flex;gap:10px;align-items:center}
 .replay pre{margin:0;padding:13px;font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:12px;
@@ -100,7 +102,8 @@ tbody tr:hover{background:#f7faff}
 .ans-task{padding:10px 14px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
 .ans pre{margin:0;padding:13px 14px;font-family:"SFMono-Regular",Menlo,Consolas,monospace;
   font-size:12.5px;line-height:1.7;white-space:pre;overflow:auto;max-height:260px}
-.ans-score{padding:11px 14px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.ans-score{padding:11px 14px;border-top:1px solid var(--line);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ans-score .sbtn{min-width:38px;padding:7px 9px;text-align:center}
 .ans-score span{font-size:12px;color:var(--muted)}
 .sbtn{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer}
 .sbtn.on{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -308,9 +311,11 @@ function fmtDate(s){
 }
 function fmtDur(ms){ const s=Math.round((ms||0)/1000); return Math.floor(s/60)+'分'+String(s%60).padStart(2,'0')+'秒'; }
 const CODE_MAX = function(){ return C.CODE_MAX == null ? 10 : C.CODE_MAX; };
+const CHOICE_POINT = function(){ return C.CHOICE_POINT == null ? 10 : C.CHOICE_POINT; };
+function choiceMaxOf(r){ return (r.total || 0) * CHOICE_POINT(); }
 function totalOf(r){
   return SC.totalScore({
-    choiceScore: r.score || 0, choiceMax: r.total || 0,
+    choiceScore: r.score || 0, choiceMax: choiceMaxOf(r),
     codeScore: (r.code_total && r.review_status !== 'done') ? null : (r.code_score || 0),
     codeCount: r.code_total || 0, codeMax: CODE_MAX(), passLine: C.PASS_LINE,
   });
@@ -351,7 +356,7 @@ function render(){
       '<td><b>'+esc(r.candidate_name)+'</b></td>' +
       '<td>'+esc(r.birth_date)+'</td>' +
       '<td>'+esc(r.lang_label)+'</td>' +
-      '<td><b>'+(r.score||0)+'</b> <span style="color:#5f6f92;font-size:11.5px">/ '+(r.total||0)+'</span></td>' +
+      '<td><b>'+(r.score||0)+'</b> <span style="color:#5f6f92;font-size:11.5px">/ '+choiceMaxOf(r)+'</span></td>' +
       '<td>'+reviewCell(r)+'</td>' +
       '<td>'+totalCell(r)+'</td>' +
       '<td>'+fmtDur(r.duration_ms)+'</td>' +
@@ -375,7 +380,7 @@ function toCsv(){
   const body = filtered().map(function(r){
     const t = totalOf(r);
     return [fmtDate(r.created_at), r.candidate_name, r.birth_date, r.lang_label,
-            r.score||0, r.total||0,
+            r.score||0, choiceMaxOf(r),
             t.complete ? (r.code_score||0) : '', (r.code_total||0)*CODE_MAX(),
             t.complete ? t.score : '', t.max, t.complete ? t.pct+'%' : '',
             t.complete ? t.rank : '', t.complete ? (t.passed?'合格':'不合格') : '',
@@ -431,15 +436,14 @@ async function openPanel(resultId){
   }catch(e){ P.events = []; }
   setupReplay();
 
-  loadVideo(row);
+  await loadVideo(row);
 }
 
 /* 採点ボタンの刻み。満点に応じて作る */
 function scoreSteps(){
-  const m = CODE_MAX();
-  if (m <= 1) return [0, 1];
-  if (m <= 5) { const a=[]; for (let i=0;i<=m;i++) a.push(i); return a; }
-  return [0, Math.round(m*0.3), Math.round(m*0.5), Math.round(m*0.8), m];
+  const a = [];
+  for (let i = 0; i <= CODE_MAX(); i++) a.push(i);
+  return a;
 }
 
 function renderAnswers(){
@@ -482,7 +486,7 @@ function renderTotal(){
   const sum = scored.reduce(function(x,id){ return x + P.scores[id]; }, 0);
   const all = scored.length === ids.length && ids.length > 0;
   const t = SC.totalScore({
-    choiceScore: P.row.score || 0, choiceMax: P.row.total || 0,
+    choiceScore: P.row.score || 0, choiceMax: choiceMaxOf(P.row),
     codeScore: all ? sum : null, codeCount: P.row.code_total || 0,
     codeMax: CODE_MAX(), passLine: C.PASS_LINE,
   });
@@ -491,13 +495,33 @@ function renderTotal(){
       + (P.row.score||0) + ' ＋ 記述式 ' + sum + '</span>'
       + '<span class="pill ' + (t.passed ? 'p' : 'f') + '">' + (t.passed ? '合格' : '不合格') + '</span>'
     : '<span>未採点が ' + (ids.length - scored.length) + ' 問あります。すべて採点すると合計点が出ます（選択式 '
-      + (P.row.score||0) + ' / ' + (P.row.total||0) + '点）</span>';
+      + (P.row.score||0) + ' / ' + choiceMaxOf(P.row) + '点）</span>';
+}
+
+/* 録画が残っていない理由をログから拾う */
+function recReason(){
+  const e = P.events || [];
+  const find = function(type){ for (let i=0;i<e.length;i++) if (e[i].type===type) return e[i]; return null; };
+  const result = find('rec_result');
+  if (result && result.note) return result.note;
+  const lines = [];
+  const scr = find('screen_off');
+  if (scr) lines.push('画面：' + (scr.msg || scr.code || '取得できず'));
+  const cam = find('cam_fail');
+  if (cam) lines.push('カメラ：' + (cam.name || '取得できず'));
+  const fail = find('rec_fail');
+  if (fail) lines.push('録画開始に失敗（' + (fail.name || '不明') + '）');
+  if (!e.length) return '操作ログも保存されていません。Supabaseへの保存に失敗した可能性があります';
+  if (!lines.length && !find('rec_start')) return '録画が開始されていません（同意なし、または端末が非対応）';
+  if (result && !result.bytes) return (lines.join(' / ') || '録画データが空でした');
+  return lines.join(' / ') || '理由を特定できません';
 }
 
 /* ---- 録画 ---- */
 async function loadVideo(row){
   if (!row.video_path){
-    $('p-rec').innerHTML = '<div class="rec-empty">録画はありません</div>';
+    $('p-rec').innerHTML = '<div class="rec-empty"><b>録画はありません</b><br>'
+      + '<span style="font-size:12px">' + esc(recReason()) + '</span></div>';
     return;
   }
   try{
@@ -509,7 +533,10 @@ async function loadVideo(row){
     P.videoUrl = URL.createObjectURL(blob);
     P.videoName = [row.candidate_name, row.lang_label, String(row.created_at).slice(0,10)]
       .join('_').replace(/[\\/:*?"<>|\s]/g, '_') + '.' + (/mp4/.test(blob.type) ? 'mp4' : 'webm');
-    $('p-rec').innerHTML = '<video controls playsinline src="' + P.videoUrl + '"></video>';
+    const kind = (P.events.find(function(e){ return e.type === 'rec_start'; }) || {}).kind || '';
+    $('p-rec').innerHTML = '<video controls playsinline src="' + P.videoUrl + '"></video>'
+      + '<div class="rec-kind">' + esc(kind || '録画') + '　'
+      + (row.video_bytes ? Math.round(row.video_bytes/1024/1024*10)/10 + 'MB' : '') + '</div>';
     $('p-dl').style.display = '';
   }catch(e){
     console.error('[SkillCheck] video load failed', e);
@@ -608,7 +635,7 @@ async function saveReview(){
     const sum = scored.reduce(function(x,a){ return x + a.score; }, 0);
     const all = scored.length === P.answers.length && P.answers.length > 0;
     const t = SC.totalScore({
-      choiceScore: P.row.score || 0, choiceMax: P.row.total || 0,
+      choiceScore: P.row.score || 0, choiceMax: choiceMaxOf(P.row),
       codeScore: all ? sum : null, codeCount: P.row.code_total || 0,
       codeMax: CODE_MAX(), passLine: C.PASS_LINE,
     });
