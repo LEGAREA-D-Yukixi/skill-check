@@ -26,9 +26,10 @@ window.SC_CONFIG = {
      画面の撮影範囲を絞れないブラウザでは、画面を撮らずカメラのみ録画します。 */
   RECORD: true,
   RECORD_SCREEN: true,     // 画面も録画する（Chrome / Edge のみ対応）
-  /* 'tab'（既定）: タブ全体を録画する。受験者の操作が広く残る
-     'card'       : 受験カードだけを録画する。映像が小さく容量も減る */
-  RECORD_AREA: 'tab',
+  /* 'screen'（既定）: 画面全体を録画する。ブラウザの外の操作も残る
+     'tab'           : このタブだけを録画する
+     'card'          : 受験カードだけを録画する。容量が最小 */
+  RECORD_AREA: 'screen',
   RECORD_BITRATE: 700000,  // 合成映像のビットレート（約5MB/分）
   RECORD_CANVAS_W: 1280,   // 録画する映像の幅（コードが読める解像度）
   RECORD_CANVAS_H: 800,

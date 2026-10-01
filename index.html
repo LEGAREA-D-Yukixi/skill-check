@@ -400,7 +400,7 @@ const $   = function(id){ return document.getElementById(id); };
 const state = {
   name:'', birth:'', nameOk:false, birthOk:false,
   caps:null, consent:false, camId:'',
-  composer:null, screenStop:null, screenMode:'', recSettled:false, recKind:'', recNote:'',
+  composer:null, screenStop:null, screenMode:'', screenCalib:null, recSettled:false, recKind:'', recNote:'',
   log:null, rec:null, camStream:null, recBlob:null, recMime:'',
   sessionId:null, sessionSaved:false,
   lang:null, exam:[], answers:[], cur:0, startedAt:0,
@@ -681,14 +681,20 @@ async function startRecording(){
   let screen = null;
   if (C.RECORD_SCREEN && state.caps.screen !== 'none'){
     try{
-      const wide = C.RECORD_AREA !== 'card';
-      screen = await SC.startScreenCapture($('ex-capture'), { narrow: !wide });
+      // 画面全体で位置を特定できなかった場合は、やり直しでタブ共有に切り替える
+      const area = state.screenFallback ? 'tab' : (C.RECORD_AREA || 'screen');
+      screen = await SC.startScreenCapture($('ex-capture'), {
+        narrow: area === 'card',
+        surface: area === 'screen' ? 'monitor' : 'browser',
+      });
       state.screenStop = screen.stop;
       state.screenMode = screen.mode;
       state.log.add('screen_on', { mode: screen.mode });
     }catch(e){
       console.error('[SkillCheck] screen capture failed', e && e.code, e && e.message);
       state.log.add('screen_off', { code: e && e.code, msg: e && e.message });
+      // 画面全体で位置を特定できなかった場合、やり直しはタブ共有にする
+      if (e && e.code === 'no-calib') state.screenFallback = true;
       state.recNote = '画面録画なし（' + (e && e.message ? e.message : '不明') + '）';
       toast(e && e.message ? e.message : '画面を録画できません');
     }
@@ -729,17 +735,18 @@ async function startRecording(){
         await new Promise(function(r){ setTimeout(r, 120); });
       }
     }
-    // 録画する範囲。tab のときは全面、card のときは受験カードだけ
-    const wideRec = !screen || screen.mode === 'tab';
-    const cropped = !!(screen && screen.mode !== 'manual' && screen.mode !== 'tab');
+    // 録画する範囲。screen / tab のときは全面、card のときは受験カードだけ
+    const wideRec = !screen || screen.mode === 'tab' || screen.mode === 'screen';
+    const cropped = !!(screen && (screen.mode === 'region' || screen.mode === 'element'));
     const areaEl = (screen && !wideRec) ? $('ex-capture') : null;
+    state.screenCalib = (screen && screen.calib) || null;
 
     // 撮影範囲の縦横比に合わせる。黒帯が出ないぶん同じ容量でも精細になる
     let cw = C.RECORD_CANVAS_W, ch = C.RECORD_CANVAS_H;
     if (screen && screen.video && screen.video.videoWidth){
       const vw = screen.video.videoWidth, vh = screen.video.videoHeight;
       let rw = vw, rh = vh;
-      if (areaEl && !cropped){
+      if (areaEl && !cropped && !state.screenCalib){
         const r = areaEl.getBoundingClientRect();
         rw = Math.round(r.width * vw / (window.innerWidth || 1));
         rh = Math.round(r.height * vh / (window.innerHeight || 1));
@@ -756,7 +763,8 @@ async function startRecording(){
       width: cw, height: ch, fps: C.RECORD_FPS,
       areaEl: areaEl,
       cropped: cropped,
-      maskPad: 4,
+      calib: function(){ return state.screenCalib; },
+      maskPad: state.screenCalib ? 40 : 4,
       maskEl: function(){
         // 記述問題を表示している間だけ、解答欄を描画から除外する。
         // 模範解答は薄い文字として重なっているため、まとめて抜いたうえで入力内容を描き直す。
@@ -774,6 +782,7 @@ async function startRecording(){
     state.rec.start();
     state.recMime = state.rec.mime;
     state.recKind = screen ? ('画面＋カメラ（' + screen.mode + '）') : 'カメラのみ';
+    if (screen && screen.recalibrate) watchWindowMove(screen);
     setRecBadge(true, screen ? '画面とカメラを録画中' : 'カメラのみ録画中');
     $('btn-rescreen').style.display = screen ? 'none' : '';
     settleRec();   // 方式が決まったので模範解答の配置を確定する
@@ -790,16 +799,34 @@ async function startRecording(){
 
 function settleRec(){ state.recSettled = true; }
 
+/* ウィンドウを動かされると画面内の位置がずれるので、測り直す。
+   測り直せない間は画面を描かない（模範解答が漏れないように） */
+function watchWindowMove(screen){
+  let last = window.screenX + ',' + window.screenY + ',' + window.outerWidth + ',' + window.outerHeight;
+  state.calibTimer = setInterval(async function(){
+    if (!state.rec) return;
+    const now = window.screenX + ',' + window.screenY + ',' + window.outerWidth + ',' + window.outerHeight;
+    if (now === last) return;
+    last = now;
+    state.screenCalib = null;                 // 測り直すまで画面は描かない
+    state.log.add('winmove', {});
+    const cal = await screen.recalibrate();
+    state.screenCalib = cal;
+    if (!cal) state.log.add('calib_lost', {});
+  }, 1500);
+}
+
 async function stopRecording(){
   let blob = null;
   if (state.rec){
     try{ blob = await state.rec.stop(); }catch(e){ console.error('[SkillCheck] stop failed', e); }
   }
+  if (state.calibTimer){ clearInterval(state.calibTimer); state.calibTimer = null; }
   if (state.composer) state.composer.stop();
   if (state.screenStop) state.screenStop();
   SC.closeCamera(state.camStream);
   state.rec = null; state.composer = null; state.screenStop = null;
-  state.camStream = null; state.screenMode = '';
+  state.camStream = null; state.screenMode = ''; state.screenCalib = null;
   setRecBadge(false, '録画終了');
   return blob;
 }

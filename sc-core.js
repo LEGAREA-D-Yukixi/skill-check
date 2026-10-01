@@ -484,6 +484,106 @@
   }
 
   // el : 録画してよい領域のルート要素（模範解答はこの外側に置くこと）
+  /* =========================================================
+     画面全体を撮る場合の位置あわせ
+
+     モニタ全体の映像には、ブラウザの表示領域がどこにあるかの情報が無い。
+     そのままでは解答欄の位置を計算できず、模範解答を隠せない。
+     そこで表示領域の四隅に目印を置き、映像の中からその色を探して
+     「表示領域 → 映像」の対応を実測する。
+     見つからなければ画面は録画しない（安全側）。
+     ========================================================= */
+
+  const MARK_A = [255, 0, 255];   // 左上
+  const MARK_B = [0, 255, 255];   // 右下
+  const MARK_C = [255, 255, 0];   // 右上（測定結果の検算用）
+  const MARK_PX = 14;
+
+  function makeMarks() {
+    const mk = function (id, color, css) {
+      let e = document.getElementById(id);
+      if (!e) {
+        e = document.createElement('div');
+        e.id = id;
+        e.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(e);
+      }
+      e.style.cssText = 'position:fixed;width:' + MARK_PX + 'px;height:' + MARK_PX + 'px;'
+        + 'background:' + color + ';z-index:2147483647;pointer-events:none;opacity:1;' + css;
+      return e;
+    };
+    return {
+      a: mk('sc-mark-a', 'rgb(255,0,255)', 'left:0;top:0'),
+      b: mk('sc-mark-b', 'rgb(0,255,255)', 'right:0;bottom:0'),
+      c: mk('sc-mark-c', 'rgb(255,255,0)', 'right:0;top:0'),
+    };
+  }
+
+  function removeMarks() {
+    ['sc-mark-a', 'sc-mark-b', 'sc-mark-c'].forEach(function (id) {
+      const e = document.getElementById(id);
+      if (e && e.parentNode) e.parentNode.removeChild(e);
+    });
+  }
+
+  // 映像から目印の中心を探す。近い色だけを拾い重心を取る
+  function findMark(data, w, h, rgb, tol) {
+    let sx = 0, sy = 0, n = 0;
+    for (let y = 0; y < h; y++) {
+      const row = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        const i = row + x * 4;
+        if (Math.abs(data[i] - rgb[0]) <= tol &&
+            Math.abs(data[i + 1] - rgb[1]) <= tol &&
+            Math.abs(data[i + 2] - rgb[2]) <= tol) { sx += x; sy += y; n++; }
+      }
+    }
+    if (n < 6) return null;
+    return { x: sx / n, y: sy / n, n: n };
+  }
+
+  // 表示領域 → 映像 の対応を求める
+  async function calibrateScreen(video) {
+    const iw = window.innerWidth, ih = window.innerHeight;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!iw || !ih || !vw || !vh) return null;
+
+    makeMarks();
+    await new Promise(function (r) { setTimeout(r, 400); });   // 目印が映るまで待つ
+
+    const cv = document.createElement('canvas');
+    cv.width = vw; cv.height = vh;
+    const c = cv.getContext('2d', { willReadFrequently: true });
+    c.drawImage(video, 0, 0, vw, vh);
+    let img;
+    try { img = c.getImageData(0, 0, vw, vh); } catch (e) { return null; }
+
+    const a = findMark(img.data, vw, vh, MARK_A, 40);
+    const b = findMark(img.data, vw, vh, MARK_B, 40);
+    const cc = findMark(img.data, vw, vh, MARK_C, 40);
+    if (!a || !b || !cc) return null;
+    if (b.x <= a.x || b.y <= a.y) return null;
+
+    // 目印の中心は表示領域の端から MARK_PX/2 の位置にある
+    const half = MARK_PX / 2;
+    const kx = (b.x - a.x) / Math.max(1, (iw - MARK_PX));
+    const ky = (b.y - a.y) / Math.max(1, (ih - MARK_PX));
+    if (!(kx > 0.05 && kx < 8) || !(ky > 0.05 && ky < 8)) return null;
+    // 縦横で倍率が違う場合は測定を信用しない
+    if (Math.abs(kx - ky) / Math.max(kx, ky) > 0.05) return null;
+
+    const cal = { ox: a.x - half * kx, oy: a.y - half * ky, kx: kx, ky: ky };
+
+    // 3点目が計算どおりの位置にあるか検算する。
+    // ずれていれば模範解答を隠し損ねる恐れがあるので採用しない。
+    const predX = cal.ox + (iw - half) * cal.kx;
+    const predY = cal.oy + half * cal.ky;
+    const tol = Math.max(6, (b.x - a.x) * 0.02);
+    if (Math.abs(predX - cc.x) > tol || Math.abs(predY - cc.y) > tol) return null;
+
+    return cal;
+  }
+
   // opts.narrow が false なら絞り込まず、タブ全体をそのまま撮る
   async function startScreenCapture(el, opts) {
     const wide = !el || (opts && opts.narrow === false);
@@ -492,26 +592,24 @@
     }
     let stream;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: 'browser', frameRate: { ideal: 8 } },
+      const want = (opts && opts.surface) || 'browser';
+      const req = {
+        video: { frameRate: { ideal: 8 } },
         audio: false,
-        preferCurrentTab: true,
         selfBrowserSurface: 'include',
         surfaceSwitching: 'exclude',
         systemAudio: 'exclude',
-      });
+      };
+      if (want === 'browser') { req.video.displaySurface = 'browser'; req.preferCurrentTab = true; }
+      else { req.video.displaySurface = 'monitor'; req.monitorTypeSurfaces = 'include'; }
+      stream = await navigator.mediaDevices.getDisplayMedia(req);
     } catch (e) {
       throw tagged('画面の共有が許可されませんでした', 'denied');
     }
     const track = stream.getVideoTracks()[0];
     const stop = function () { stream.getTracks().forEach(function (t) { t.stop(); }); };
 
-    // タブ以外（画面全体・ウィンドウ）を選ばれた場合は範囲を絞れない
     const surface = (track.getSettings && track.getSettings().displaySurface) || '';
-    if (surface !== 'browser') {
-      stop();
-      throw tagged('共有の選択で「このタブ」を選んでください', 'wrong-surface');
-    }
 
     // 受け手が一度もなくなるとタブキャプチャは止まるため、
     // 検証用の video をそのまま合成でも使い回す（破棄しない）。
@@ -522,6 +620,18 @@
     if (!(await nextFrame(view, 4000))) {
       stopAll();
       throw tagged('画面の映像を取得できませんでした', 'no-frames');
+    }
+
+    // 画面全体やウィンドウを選ばれた場合は、表示領域の位置を実測してから使う
+    if (surface !== 'browser') {
+      const cal = await calibrateScreen(view);
+      if (!cal) {
+        removeMarks(); stopAll();
+        throw tagged('画面内のブラウザ位置を特定できませんでした。'
+          + 'ブラウザが映る画面を選び直すか、「このタブ」を選んでください', 'no-calib');
+      }
+      return { stream: stream, mode: 'screen', stop: function(){ removeMarks(); stopAll(); },
+               video: view, calib: cal, recalibrate: function(){ return calibrateScreen(view); } };
     }
 
     // タブ全体を録画する場合はここで終わり（絞り込まない）
@@ -627,6 +737,7 @@
     const sv = screenVideo || null;
     const areaEl  = o.areaEl || null;   // 録画してよい範囲
     const cropped = !!o.cropped;        // ブラウザ側で既に絞り込み済みか
+    const getCalib = o.calib || null;   // 画面全体のときの「表示領域→映像」の対応
     const maskEl  = o.maskEl || null;   // 録画から除外する要素を返す関数
     const paintMask = o.paintMask || null;  // 除外した場所に描き直す処理（任意）
     const cvid = camStream ? videoFrom(camStream) : null;
@@ -644,6 +755,52 @@
       if (!vw || !vh) return;
       const iw = window.innerWidth || 0, ih = window.innerHeight || 0;
       if (!iw || !ih) return;
+
+      // 画面全体を撮っている場合は、実測した対応で表示領域の位置を求める
+      const cal = getCalib ? getCalib() : null;
+      if (cal) {
+        const toV2 = function (r) {
+          return { x: cal.ox + r.left * cal.kx, y: cal.oy + r.top * cal.ky,
+                   w: r.width * cal.kx, h: r.height * cal.ky };
+        };
+        const holes2 = [];
+        const me2 = maskEl ? maskEl() : null;
+        if (me2) {
+          const mr = me2.getBoundingClientRect();
+          if (!mr.width || !mr.height) return;
+          const v = toV2(mr);
+          const s2 = Math.min(w / vw, h / vh);
+          const dx2 = (w - vw * s2) / 2, dy2 = (h - vh * s2) / 2;
+          const pad2 = (o.maskPad == null ? 22 : o.maskPad) * Math.min(cal.kx, cal.ky) * s2;
+          holes2.push({ x: dx2 + v.x * s2 - pad2, y: dy2 + v.y * s2 - pad2,
+                        w: v.w * s2 + pad2 * 2, h: v.h * s2 + pad2 * 2 });
+        }
+        const s2 = Math.min(w / vw, h / vh);
+        const dw2 = vw * s2, dh2 = vh * s2;
+        const dx2 = (w - dw2) / 2, dy2 = (h - dh2) / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(dx2, dy2, dw2, dh2);
+        for (let i = 0; i < holes2.length; i++) ctx.rect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
+        ctx.clip('evenodd');
+        ctx.drawImage(video, 0, 0, vw, vh, dx2, dy2, dw2, dh2);
+        ctx.restore();
+        if (holes2.length) {
+          ctx.fillStyle = o.maskFill || '#ffffff';
+          for (let i = 0; i < holes2.length; i++) ctx.fillRect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
+          if (paintMask) {
+            for (let i = 0; i < holes2.length; i++) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
+              ctx.clip();
+              try { paintMask(ctx, holes2[i], Math.min(cal.kx, cal.ky) * s2); } catch (e) {}
+              ctx.restore();
+            }
+          }
+        }
+        return;
+      }
 
       // 映像が写している範囲。絞り込み済みなら対象要素、そうでなければ表示領域全体
       let base, src;
@@ -943,6 +1100,8 @@
     openCameraStream: openCameraStream,
     screenCaptureSupport: screenCaptureSupport,
     startScreenCapture: startScreenCapture,
+    calibrateScreen: calibrateScreen,
+    removeMarks: removeMarks,
     createComposer: createComposer,
     extFor: extFor,
     createRecorder: createRecorder,
