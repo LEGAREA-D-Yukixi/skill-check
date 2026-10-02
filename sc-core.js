@@ -730,12 +730,25 @@
   /* 除外範囲を広げる。
      日本語入力の変換候補はOSが描くため要素として取れない。
      変換中だけ下方向に広げて録画から外す。 */
-  function growRect(r, growFn) {
-    const g = (growFn && growFn()) || null;
-    if (!g) return r;
-    const l = g.left || 0, t = g.top || 0, rt = g.right || 0, b = g.bottom || 0;
-    return { left: r.left - l, top: r.top - t,
-             width: r.width + l + rt, height: r.height + t + b };
+  /* 画面の映像は数フレーム遅れて届く。
+     いま測った位置で描くと、動いた直後だけ映像と合わず一瞬ずれて見える。
+     そこで位置の履歴を持ち、映像が写しているであろう少し前の位置を使う。
+     動いている間は新旧の位置をまとめた範囲を抜き、はみ出しも防ぐ。 */
+  function laggedRect(log, cur, lagMs) {
+    const now = Date.now();
+    log.push({ t: now, r: cur });
+    while (log.length > 1 && now - log[0].t > lagMs + 600) log.shift();
+
+    let use = log[0].r;
+    for (let i = 0; i < log.length; i++) {
+      if (now - log[i].t <= lagMs) break;
+      use = log[i].r;
+    }
+    // 直近で動いていれば、その間の位置をすべて含む範囲にする
+    let l = Math.min(use.left, cur.left), t = Math.min(use.top, cur.top);
+    let r2 = Math.max(use.left + use.width, cur.left + cur.width);
+    let b2 = Math.max(use.top + use.height, cur.top + cur.height);
+    return { draw: use, hole: { left: l, top: t, width: r2 - l, height: b2 - t } };
   }
 
   // screenVideo は startScreenCapture が返した video 要素をそのまま渡す
@@ -750,7 +763,8 @@
     const cropped = !!o.cropped;        // ブラウザ側で既に絞り込み済みか
     const getCalib = o.calib || null;   // 画面全体のときの「表示領域→映像」の対応
     const maskEl  = o.maskEl || null;   // 録画から除外する要素を返す関数
-    const maskGrow = o.maskGrow || null; // 除外範囲を広げる量（CSSピクセル）
+    const maskLag = o.maskLag == null ? 180 : o.maskLag;  // 映像が届くまでの遅れ（ミリ秒）
+    const rectLog = [];                 // 除外範囲の履歴。遅れに合わせて少し前の位置を使う
     const paintMask = o.paintMask || null;  // 除外した場所に描き直す処理（任意）
     const cvid = camStream ? videoFrom(camStream) : null;
     let timer = null;
@@ -778,9 +792,10 @@
         const holes2 = [];
         const me2 = maskEl ? maskEl() : null;
         if (me2) {
-          const mr0 = me2.getBoundingClientRect();
-          if (!mr0.width || !mr0.height) return;
-          const mr = growRect(mr0, maskGrow);
+          const cur = me2.getBoundingClientRect();
+          if (!cur.width || !cur.height) return;
+          const lag = laggedRect(rectLog, cur, maskLag);
+          const mr = lag.hole, mr0 = lag.draw;
           const v = toV2(mr);
           const v0 = toV2(mr0);
           const s2 = Math.min(w / vw, h / vh);
@@ -856,9 +871,10 @@
       const holes = [];
       const me = maskEl ? maskEl() : null;
       if (me) {
-        const mr0 = me.getBoundingClientRect();
-        if (!mr0.width || !mr0.height) return;   // 位置を特定できない＝描かない
-        const mr = growRect(mr0, maskGrow);
+        const cur = me.getBoundingClientRect();
+        if (!cur.width || !cur.height) return;   // 位置を特定できない＝描かない
+        const lag = laggedRect(rectLog, cur, maskLag);
+        const mr = lag.hole, mr0 = lag.draw;
         const v = toVideo(mr);
         const v0 = toVideo(mr0);
         const pad = (o.maskPad == null ? 22 : o.maskPad) * Math.min(kx, ky) * s;

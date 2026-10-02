@@ -624,6 +624,82 @@ const score = member.score;`,
     exp: '必要なプロパティをまとめて取り出せます。既定値も指定できます。' },
 ],
 
+/* ================= AWS ================= */
+aws: [
+  { t: 'バケットの中身を一覧する',
+    task: 'AWS CLI で my-bucket の中身を再帰的に一覧するコマンドに直してください。',
+    code: `aws s3 list s3://my-bucket`,
+    answer: `aws s3 ls s3://my-bucket --recursive`,
+    exp: '一覧は ls です。--recursive を付けると配下のキーまで辿ります。' },
+
+  { t: 'パブリックアクセスをブロックする',
+    task: '4つの設定をすべて true にして、バケットの公開を塞ぐ内容に直してください。',
+    code: `aws s3api put-public-access-block \\
+  --bucket my-bucket \\
+  --public-access-block-configuration BlockPublicAcls=false`,
+    answer: `aws s3api put-public-access-block \\
+  --bucket my-bucket \\
+  --public-access-block-configuration \\
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true`,
+    exp: '4項目すべてを有効にしないと、ACLやバケットポリシー経由で公開される余地が残ります。' },
+
+  { t: '読み取りだけを許可するポリシーにする',
+    task: '書き込みを除き、オブジェクトの取得と一覧だけを許可する内容に直してください。',
+    code: `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::my-bucket/*"
+    }
+  ]
+}`,
+    answer: `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::my-bucket",
+        "arn:aws:s3:::my-bucket/*"
+      ]
+    }
+  ]
+}`,
+    exp: 'ListBucket はバケット本体、GetObject は配下のオブジェクトが対象です。両方の ARN が要ります。' },
+
+  { t: 'インスタンスにタグを付ける',
+    task: 'Name タグに web-01 を設定するコマンドに直してください。',
+    code: `aws ec2 create-tags --resources i-0123456789abcdef0`,
+    answer: `aws ec2 create-tags --resources i-0123456789abcdef0 \\
+  --tags Key=Name,Value=web-01`,
+    exp: '--tags に Key と Value の組を渡します。複数指定するときは空白で区切ります。' },
+
+  { t: 'S3 バケットを定義する',
+    task: 'CloudFormation で、バージョニングを有効にした S3 バケットを定義してください。',
+    code: `Resources:
+  AssetsBucket:
+    Type: AWS::S3::Bucket`,
+    answer: `Resources:
+  AssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-assets-bucket
+      VersioningConfiguration:
+        Status: Enabled`,
+    exp: 'Properties の下に設定を並べます。VersioningConfiguration の Status は Enabled か Suspended です。' },
+
+  { t: '環境変数を設定する',
+    task: 'Lambda 関数 my-func に環境変数 STAGE=prod を設定するコマンドに直してください。',
+    code: `aws lambda update-function-configuration --function-name my-func`,
+    answer: `aws lambda update-function-configuration \\
+  --function-name my-func \\
+  --environment "Variables={STAGE=prod}"`,
+    exp: '--environment に Variables={...} の形で渡します。既存の変数は置き換わるので注意します。' },
+],
+
 /* ================= HTML ================= */
 html: [
   { t: '代替テキストを追加する',
