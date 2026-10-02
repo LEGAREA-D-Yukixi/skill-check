@@ -185,7 +185,6 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
   background:#eef3fa;border:1.5px solid #d7e2f1;color:#4a5f82;
   font-size:14px;font-weight:700;
 }
-.ans-hint em{font-style:normal;font-weight:400;font-size:11.5px;color:var(--muted);margin-left:10px}
 .code-before{
   font-family:"SFMono-Regular",Menlo,Consolas,"Noto Sans Mono CJK JP",monospace;
   font-size:13px;line-height:1.7;tab-size:4;white-space:pre;overflow:auto;
@@ -210,6 +209,12 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
   resize:none;display:block;caret-color:var(--blue);cursor:text;
 }
 .code-edit:read-only{cursor:text}
+/* readonly の入力欄には点滅カーソルが出ないので自分で描く */
+.caret{
+  position:absolute;width:2px;background:var(--blue);display:none;
+  pointer-events:none;z-index:3;animation:caret-blink 1.06s step-end infinite;
+}
+@keyframes caret-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
 .code-edit:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12)}
 
 /* ===== 録画インジケータ ===== */
@@ -354,6 +359,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
                 <pre class="code-ghost" id="ex-model" aria-hidden="true"></pre>
                 <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
                           autocomplete="off" autocorrect="off" wrap="off" lang="en" readonly></textarea>
+                <div class="caret" id="ex-caret" aria-hidden="true"></div>
               </div>
             </div>
             <div class="btn-row" style="margin-top:12px">
@@ -504,8 +510,8 @@ async function ensureSession(){
 /* ---- 選択式の描画 ---- */
 function renderChoiceQ(item, n){
   // 正解の表示。録画には映らない
-  $('ex-hint').innerHTML = '正解：' + String.fromCharCode(65 + item.answer) + '. '
-    + esc(item.choices[item.answer]) + '<em>この欄は録画に残りません</em>';
+  $('ex-hint').textContent = '正解：' + String.fromCharCode(65 + item.answer) + '. '
+    + item.choices[item.answer];
   $('ex-choices').innerHTML = item.choices.map(function(t,i){
     const sel = state.answers[state.cur] === i;
     return '<button class="choice'+(sel?' sel':'')+'" data-i="'+i+'">' +
@@ -544,6 +550,7 @@ function renderCodeQ(item){
     state.answers[state.cur] = v;
     state.log.snapshot(item.qid, v);
     refreshDots();
+    syncCaret();
   }
 
   ed.onkeydown = function(e){
@@ -589,8 +596,14 @@ function renderCodeQ(item){
       } else {
         ed.setSelectionRange(to, to);
       }
+      syncCaret();
     }
   };
+  ed.onfocus = syncCaret;
+  ed.onblur  = syncCaret;
+  ed.onclick = function(){ setTimeout(syncCaret, 0); };
+  ed.onselect = syncCaret;
+  ed.onkeyup = syncCaret;
 
   // readonly でも念のため残す。想定外の経路で文字が入っても半角に揃える
   ed.oninput = function(){
@@ -609,8 +622,10 @@ function renderCodeQ(item){
   ed.onscroll = function(){
     const g = $('ex-model');
     g.scrollTop = ed.scrollTop; g.scrollLeft = ed.scrollLeft;
+    syncCaret();
   };
   ed.scrollTop = 0; $('ex-model').scrollTop = 0;
+  syncCaret();
   $('btn-reset-code').onclick = function(){
     state.log.add('reset', { qid:item.qid });
     commit('', 0);
@@ -689,6 +704,48 @@ function toAscii(v){
 }
 
 /* readonly の入力欄ではキャレットがキー操作で動かないため、移動も自分で計算する */
+/* 等幅なので、文字数から位置を出せる */
+let charWCache = 0;
+function charWidth(ed){
+  if (charWCache) return charWCache;
+  const cs = getComputedStyle(ed);
+  const c = document.createElement('canvas').getContext('2d');
+  c.font = cs.fontSize + ' ' + cs.fontFamily;
+  charWCache = c.measureText('0').width || 8;
+  return charWCache;
+}
+
+function caretRowCol(ed){
+  const before = String(ed.value || '').slice(0, ed.selectionStart);
+  const nl = before.lastIndexOf('\n');
+  return { row: (before.match(/\n/g) || []).length, col: before.length - (nl + 1) };
+}
+
+function syncCaret(){
+  const ed = $('ex-edit'), el = $('ex-caret');
+  if (!ed || !el) return;
+  const on = document.activeElement === ed
+          && ed.selectionStart === ed.selectionEnd
+          && $('ex-code').style.display !== 'none';
+  el.style.display = on ? 'block' : 'none';
+  if (!on) return;
+  const cs = getComputedStyle(ed);
+  const fs = parseFloat(cs.fontSize) || 13.5;
+  const lh = parseFloat(cs.lineHeight) || fs * 1.72;
+  const pl = parseFloat(cs.paddingLeft) || 16;
+  const pt = parseFloat(cs.paddingTop) || 14;
+  const bw = parseFloat(cs.borderLeftWidth) || 0;
+  const p = caretRowCol(ed);
+  const h = fs * 1.25;
+  el.style.left   = (bw + pl + p.col * charWidth(ed) - ed.scrollLeft) + 'px';
+  el.style.top    = (bw + pt + p.row * lh - ed.scrollTop + (lh - h) / 2) + 'px';
+  el.style.height = h + 'px';
+  // 点滅をいったん戻して、打った直後は必ず見えるようにする
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+}
+
 function caretAt(v, s, key){
   const lineStart = v.lastIndexOf('\n', Math.max(0, s - 1)) + 1;
   const nl = v.indexOf('\n', s);
@@ -813,6 +870,16 @@ function paintAnswerField(ctx, r, scale){
     if (y - asc > ry + rh) break;
     if (y + desc < ry) continue;
     ctx.fillText(lines[i], x, y);
+  }
+
+  // 入力位置のカーソルも描く（録画では点滅させない）
+  if (document.activeElement === ed && ed.selectionStart === ed.selectionEnd){
+    const p = caretRowCol(ed);
+    const ch = fs * 1.25 * scale;
+    const cx = rx + (pl + p.col * charWidth(ed) - ed.scrollLeft) * scale;
+    const cy = ry + (pt + p.row * lh - ed.scrollTop + (lh - fs * 1.25) / 2) * scale;
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillRect(Math.round(cx), Math.round(cy), Math.max(1, Math.round(2 * scale)), ch);
   }
   ctx.restore();
 }
