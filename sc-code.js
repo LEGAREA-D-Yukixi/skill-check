@@ -16,13 +16,13 @@ objc: [
   { t: 'nil チェックを追加する',
     task: 'name が nil のときにクラッシュしないよう、nil チェックを追加してください。',
     code: `- (NSString *)greeting:(NSString *)name {
-    return [NSString stringWithFormat:@"こんにちは、%@さん", name];
+    return [NSString stringWithFormat:@"Hello, %@", name];
 }`,
     answer: `- (NSString *)greeting:(NSString *)name {
     if (name == nil) {
-        return @"こんにちは";
+        return @"Hello";
     }
-    return [NSString stringWithFormat:@"こんにちは、%@さん", name];
+    return [NSString stringWithFormat:@"Hello, %@", name];
 }`,
     exp: 'stringWithFormat に nil を渡すと "(null)" が埋め込まれます。早期リターンで分岐します。' },
 
@@ -41,9 +41,9 @@ objc: [
   { t: '文字列リテラルを修正する',
     task: 'NSString のリテラルとして正しい書き方に直してください。',
     code: `NSString *company = "LEGAREA";
-NSArray *members = @[ "佐藤", "鈴木" ];`,
+NSArray *members = @[ "Sato", "Suzuki" ];`,
     answer: `NSString *company = @"LEGAREA";
-NSArray *members = @[ @"佐藤", @"鈴木" ];`,
+NSArray *members = @[ @"Sato", @"Suzuki" ];`,
     exp: 'Objective-C の NSString リテラルは @ が必要です。@ が無いと C 言語の char* になります。' },
 
   { t: '高速列挙に書き換える',
@@ -68,7 +68,7 @@ NSInteger len = [text length];`,
   { t: '可変配列に変更する',
     task: '要素を追加できるよう、NSArray を NSMutableArray に変更して addObject で追加してください。',
     code: `NSArray *langs = @[ @"Swift" ];
-// ここに Objective-C を追加したい`,
+// add Objective-C here`,
     answer: `NSMutableArray *langs = [NSMutableArray arrayWithObject:@"Swift"];
 [langs addObject:@"Objective-C"];`,
     exp: 'NSArray は生成後に変更できません。追加・削除が必要なら NSMutableArray を使います。' },
@@ -80,22 +80,22 @@ swift: [
     task: '再代入していない変数を let に変更してください。',
     code: `var companyName = "LEGAREA"
 var memberCount = 120
-print("\\(companyName): \\(memberCount)名")`,
+print("\\(companyName): \\(memberCount)")`,
     answer: `let companyName = "LEGAREA"
 let memberCount = 120
-print("\\(companyName): \\(memberCount)名")`,
+print("\\(companyName): \\(memberCount)")`,
     exp: '再代入しない値は let にします。意図が明確になり、コンパイラの最適化も効きます。' },
 
   { t: '強制アンラップをやめる',
     task: '強制アンラップを使わず、オプショナルバインディングで安全に取り出してください。',
     code: `func show(_ name: String?) {
-    print("氏名: " + name!)
+    print("Name: " + name!)
 }`,
     answer: `func show(_ name: String?) {
     if let name = name {
-        print("氏名: " + name)
+        print("Name: " + name)
     } else {
-        print("氏名: 未登録")
+        print("Name: unknown")
     }
 }`,
     exp: '! は nil のときクラッシュします。if let / guard let で分岐するのが基本です。' },
@@ -116,13 +116,13 @@ let total = scores.reduce(0, +)`,
     code: `func register(name: String?) {
     if let name = name {
         if !name.isEmpty {
-            print("登録: \\(name)")
+            print("Registered: \\(name)")
         }
     }
 }`,
     answer: `func register(name: String?) {
     guard let name = name, !name.isEmpty else { return }
-    print("登録: \\(name)")
+    print("Registered: \\(name)")
 }`,
     exp: 'guard は条件を満たさない場合に抜けるため、本処理のネストが浅くなります。' },
 
@@ -148,9 +148,9 @@ let total = scores.reduce(0, +)`,
 if let n = member.nickname {
     displayName = n
 } else {
-    displayName = "名無し"
+    displayName = "Guest"
 }`,
-    answer: `let displayName = member.nickname ?? "名無し"`,
+    answer: `let displayName = member.nickname ?? "Guest"`,
     exp: '?? は左辺が nil のとき右辺を返します。1行で書けて var も不要になります。' },
 ],
 
@@ -172,9 +172,9 @@ protected void onCreate(Bundle savedInstanceState) {
   { t: 'キャストを追加する',
     task: 'findViewById の戻り値を TextView として受け取れるよう修正してください。',
     code: `TextView title = findViewById(R.id.title);
-title.setText("スキルチェック");`,
+title.setText("SkillCheck");`,
     answer: `TextView title = (TextView) findViewById(R.id.title);
-title.setText("スキルチェック");`,
+title.setText("SkillCheck");`,
     exp: 'findViewById は View を返すため、古い API レベルでは明示的なキャストが必要です。' },
 
   { t: '別の画面を開く',
@@ -182,7 +182,7 @@ title.setText("スキルチェック");`,
     code: `button.setOnClickListener(new View.OnClickListener() {
     @Override
     public void onClick(View v) {
-        // ここで結果画面を開く
+        // open the result screen here
     }
 });`,
     answer: `button.setOnClickListener(new View.OnClickListener() {
@@ -197,10 +197,10 @@ title.setText("スキルチェック");`,
   { t: 'Toast を表示する',
     task: '保存完了のメッセージを Toast で短く表示してください。',
     code: `private void onSaved() {
-    // 「保存しました」と表示する
+    // show a toast here
 }`,
     answer: `private void onSaved() {
-    Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
+    Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
 }`,
     exp: 'makeText を作っただけでは表示されません。show() の呼び出しが必要です。' },
 
@@ -241,11 +241,11 @@ kotlin: [
   { t: '読み取り専用にする',
     task: '再代入していない変数を val に変更してください。',
     code: `var company = "LEGAREA"
-var members = listOf("佐藤", "鈴木")
-println("\$company: \${members.size}名")`,
+var members = listOf("Sato", "Suzuki")
+println("\$company: \${members.size}")`,
     answer: `val company = "LEGAREA"
-val members = listOf("佐藤", "鈴木")
-println("\$company: \${members.size}名")`,
+val members = listOf("Sato", "Suzuki")
+println("\$company: \${members.size}")`,
     exp: 'Kotlin では val が基本です。var は再代入が必要なときだけ使います。' },
 
   { t: 'null 安全呼び出しにする',
@@ -280,22 +280,22 @@ println("\$company: \${members.size}名")`,
 
   { t: '拡張関数を定義する',
     task: 'String に、空なら既定値を返す orDefault 拡張関数を追加してください。',
-    code: `// String に orDefault を追加する
-val name = "".orDefault("未設定")`,
+    code: `// add orDefault to String
+val name = "".orDefault("none")`,
     answer: `fun String.orDefault(value: String): String =
     if (this.isEmpty()) value else this
 
-val name = "".orDefault("未設定")`,
+val name = "".orDefault("none")`,
     exp: '既存クラスを継承せずに機能を足せます。this がレシーバを指します。' },
 
   { t: '名前付き引数で呼び出す',
     task: '引数の意味が分かるよう、名前付き引数を使った呼び出しに直してください。',
     code: `fun createMember(name: String, isAdmin: Boolean, isActive: Boolean) { }
 
-createMember("佐藤", true, false)`,
+createMember("Sato", true, false)`,
     answer: `fun createMember(name: String, isAdmin: Boolean, isActive: Boolean) { }
 
-createMember(name = "佐藤", isAdmin = true, isActive = false)`,
+createMember(name = "Sato", isAdmin = true, isActive = false)`,
     exp: '真偽値が並ぶ呼び出しは順番を間違えやすいため、名前付き引数で明示します。' },
 ],
 
@@ -351,7 +351,7 @@ String result = sb.toString();`,
   { t: '重複を取り除く',
     task: 'List の重複を取り除いた Set を作ってください。',
     code: `List<String> langs = Arrays.asList("Java", "Kotlin", "Java");
-// 重複を除いた一覧がほしい`,
+// need a list without duplicates`,
     answer: `List<String> langs = Arrays.asList("Java", "Kotlin", "Java");
 Set<String> unique = new HashSet<>(langs);`,
     exp: 'Set は重複を許しません。順序を保ちたい場合は LinkedHashSet を使います。' },
@@ -373,14 +373,14 @@ python: [
     task: 'ブロックが正しく認識されるようインデントを修正してください。',
     code: `def greet(name):
 if name:
-print(f"こんにちは、{name}さん")
+print(f"Hello, {name}")
 else:
-print("こんにちは")`,
+print("Hello")`,
     answer: `def greet(name):
     if name:
-        print(f"こんにちは、{name}さん")
+        print(f"Hello, {name}")
     else:
-        print("こんにちは")`,
+        print("Hello")`,
     exp: 'Python はインデントがブロックそのものです。半角スペース4つが推奨されます。' },
 
   { t: 'リスト内包表記にする',
@@ -402,24 +402,24 @@ f.close()`,
 
   { t: 'f-string にする',
     task: '文字列の組み立てを f-string に書き換えてください。',
-    code: `message = "氏名: " + name + " / 得点: " + str(score)`,
-    answer: `message = f"氏名: {name} / 得点: {score}"`,
+    code: `message = "Name: " + name + " / Score: " + str(score)`,
+    answer: `message = f"Name: {name} / Score: {score}"`,
     exp: 'f-string なら str() での変換が不要で、読みやすくなります。' },
 
   { t: '辞書の既定値を使う',
     task: 'キーが無い場合でも例外にならないよう get を使ってください。',
     code: `name = member["nickname"]`,
-    answer: `name = member.get("nickname", "未設定")`,
+    answer: `name = member.get("nickname", "none")`,
     exp: '[] はキーが無いと KeyError になります。get なら第2引数が既定値になります。' },
 
   { t: 'main ガードを付ける',
     task: 'import 時に実行されないよう main ガードを追加してください。',
     code: `def main():
-    print("集計を開始します")
+    print("start")
 
 main()`,
     answer: `def main():
-    print("集計を開始します")
+    print("start")
 
 if __name__ == "__main__":
     main()`,
@@ -440,18 +440,18 @@ php: [
 
   { t: '文字列連結を直す',
     task: 'PHP の連結演算子に修正してください。',
-    code: `$label = "氏名: " + $name + "さん";`,
-    answer: `$label = "氏名: " . $name . "さん";`,
+    code: `$label = "Name: " + $name + " san";`,
+    answer: `$label = "Name: " . $name . " san";`,
     exp: 'PHP の + は数値加算です。文字列の連結はドットを使います。' },
 
   { t: '配列を短縮構文にする',
     task: '配列の記法を現在の標準的な書き方に直してください。',
     code: `$member = array(
-    'name' => '佐藤',
+    'name' => 'Sato',
     'role' => 'admin'
 );`,
     answer: `$member = [
-    'name' => '佐藤',
+    'name' => 'Sato',
     'role' => 'admin',
 ];`,
     exp: 'PHP 5.4 以降は [] が使えます。末尾のカンマを残すと差分が見やすくなります。' },
@@ -587,10 +587,10 @@ for (let i = 0; i < members.length; i++) {
   { t: '厳密等価にする',
     task: '型変換を伴わない比較に直してください。',
     code: `if (score == "100") {
-  console.log("満点");
+  console.log("perfect");
 }`,
     answer: `if (score === 100) {
-  console.log("満点");
+  console.log("perfect");
 }`,
     exp: '== は型を変換して比較します。意図しない一致を避けるため === を使います。' },
 
@@ -629,7 +629,7 @@ html: [
   { t: '代替テキストを追加する',
     task: '画像に説明用の alt 属性を追加してください。',
     code: `<img src="/img/logo.png" width="120">`,
-    answer: `<img src="/img/logo.png" width="120" alt="LEGAREAのロゴ">`,
+    answer: `<img src="/img/logo.png" width="120" alt="LEGAREA logo">`,
     exp: '読み上げや画像が表示できない場合に使われます。アクセシビリティ上必須です。' },
 
   { t: 'セマンティック要素にする',
@@ -638,21 +638,21 @@ html: [
   <h1>SkillCheck</h1>
 </div>
 <div class="main">
-  <p>受験を開始します。</p>
+  <p>Start the exam.</p>
 </div>`,
     answer: `<header>
   <h1>SkillCheck</h1>
 </header>
 <main>
-  <p>受験を開始します。</p>
+  <p>Start the exam.</p>
 </main>`,
     exp: '意味を持つ要素を使うと、読み上げや検索エンジンが構造を理解できます。' },
 
   { t: 'ラベルを紐付ける',
     task: 'ラベルをタップしても入力欄が選択されるよう紐付けてください。',
-    code: `<label>氏名</label>
+    code: `<label>Name</label>
 <input type="text" class="name">`,
-    answer: `<label for="name">氏名</label>
+    answer: `<label for="name">Name</label>
 <input type="text" id="name" class="name">`,
     exp: 'label の for と input の id を一致させます。タップ領域が広がり操作しやすくなります。' },
 
@@ -669,9 +669,9 @@ html: [
 
   { t: 'リストに書き換える',
     task: '箇条書きを ul と li で書き直してください。',
-    code: `<p>・Swift</p>
-<p>・Kotlin</p>
-<p>・TypeScript</p>`,
+    code: `<p>- Swift</p>
+<p>- Kotlin</p>
+<p>- TypeScript</p>`,
     answer: `<ul>
   <li>Swift</li>
   <li>Kotlin</li>
@@ -683,11 +683,11 @@ html: [
     task: 'form に送信先と送信方法を指定してください。',
     code: `<form>
   <input type="text" name="name">
-  <button type="submit">送信</button>
+  <button type="submit">Submit</button>
 </form>`,
     answer: `<form action="/submit" method="post">
   <input type="text" name="name">
-  <button type="submit">送信</button>
+  <button type="submit">Submit</button>
 </form>`,
     exp: 'action が送信先、method が送信方法です。未指定だと同じURLへ GET されます。' },
 ],

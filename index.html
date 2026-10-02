@@ -346,7 +346,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
             </div>
 
             <div class="code-panel">
-              <div class="code-label">解答欄</div>
+              <div class="code-label">解答欄<span class="code-hint">半角英数のみ</span></div>
               <!-- 模範解答は薄い文字として重ねる。録画時は canvas で抜き、入力内容だけ描き直す -->
               <div class="edit-stack" id="ex-stack">
                 <pre class="code-ghost" id="ex-model" aria-hidden="true"></pre>
@@ -534,15 +534,27 @@ function renderCodeQ(item){
   ed.oninput = null;
   state.log.resetSnapshot();
   ed.oninput = function(){
+    if (enforceAscii(ed)) toast('解答欄は半角英数のみ入力できます');
     state.answers[state.cur] = ed.value;
     state.log.snapshot(item.qid, ed.value);
     refreshDots();
   };
-  ed.onpaste = function(){ state.log.add('paste', { qid:item.qid }); };
-  // 変換候補はOSが描くので要素として掴めない。変換中だけ除外範囲を広げて逃がす
-  ed.oncompositionstart = function(){ state.composing = true; };
-  ed.oncompositionend   = function(){ state.composing = false; };
-  ed.onblur = function(){ state.composing = false; };
+  ed.onpaste = function(){
+    state.log.add('paste', { qid:item.qid });
+    setTimeout(function(){ enforceAscii(ed); }, 0);
+  };
+  // 日本語入力が始まったら即座に打ち切る。変換候補が開いたままにならない
+  ed.oncompositionstart = function(){
+    const keep = toAscii(ed.value), pos = ed.selectionStart;
+    ed.blur();
+    setTimeout(function(){
+      ed.value = keep;
+      ed.focus();
+      try { ed.setSelectionRange(pos, pos); } catch (e) {}
+    }, 0);
+    toast('解答欄は半角英数のみ入力できます');
+  };
+  ed.oncompositionend = function(){ enforceAscii(ed); };
   ed.onscroll = function(){
     const g = $('ex-model');
     g.scrollTop = ed.scrollTop; g.scrollLeft = ed.scrollLeft;
@@ -617,6 +629,26 @@ async function startExam(key){
   // await を挟まないので、画面共有の許可を求める権利は維持される。
   ensureSession();
   await startRecording();
+}
+
+/* 解答欄は半角英数のみにする。
+   日本語入力が始まらないので、OSの変換候補が解答欄の下に出ることもない。
+   模範解答も全問が半角のみで書かれている。 */
+function toAscii(v){
+  return String(v == null ? '' : v)
+    .replace(/[！-～]/g, function(c){ return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+    .replace(/\u3000/g, ' ')
+    .replace(/[^\t\n\x20-\x7E]/g, '');
+}
+
+function enforceAscii(ed){
+  const before = ed.value;
+  const after = toAscii(before);
+  if (after === before) return false;
+  const pos = Math.max(0, ed.selectionStart - (before.length - after.length));
+  ed.value = after;
+  try { ed.setSelectionRange(pos, pos); } catch (e) {}
+  return true;
 }
 
 function logMove(to, how){
@@ -795,14 +827,6 @@ async function startRecording(){
           return (hn && hn.offsetHeight > 0) ? hn : null;
         }
         return null;
-      },
-      maskGrow: function(){
-        // 日本語入力の変換候補はOSが解答欄のすぐ下に描くため、要素として掴めない。
-        // 解答欄を操作している間は下方向へ広げて、まとめて録画から外す。
-        const ed = $('ex-edit');
-        if (!ed) return null;
-        const active = state.composing || document.activeElement === ed;
-        return active ? { bottom: 240, left: 24, right: 24 } : null;
       },
       paintMask: function(ctx, rect, scale, el){
         // 解答欄だけは入力内容を描き直す。正解の表示欄は白いままでよい
