@@ -712,6 +712,28 @@ function bindPlayer(v){
   rate.onchange = function(){ v.playbackRate = parseFloat(rate.value) || 1; };
 }
 
+/* 保存する前に動画の長さを書き込む。
+   録画そのものには長さが無く、外部のプレーヤーでもシークできないため。
+   新しい録画は受験側で書き込み済みなので、その場合は何もしない。 */
+async function withDurationForDownload(blob){
+  if (!SC || !SC.withDuration) return blob;
+  let url = null;
+  try{
+    url = URL.createObjectURL(blob);
+    const v = document.createElement('video');
+    v.preload = 'auto'; v.muted = true; v.playsInline = true; v.src = url;
+    const sec = await probeDuration(v);
+    v.src = '';
+    if (!(sec > 0)) return blob;
+    return await SC.withDuration(blob, Math.round(sec * 1000));
+  }catch(e){
+    console.error('[SkillCheck] duration patch failed', e);
+    return blob;
+  }finally{
+    if (url) URL.revokeObjectURL(url);
+  }
+}
+
 /* 録画が残っていない理由をログから拾う */
 const UPLOAD_JA = {
   '-1':  'ネットワークに接続できません',
@@ -896,7 +918,8 @@ async function downloadVideo(resultId, btn){
     const bucket = String(row.video_path).split('/')[0];
     const res = await fetch(BASE() + '/storage/v1/object/' + bucket + '/' + path, { headers: auth() });
     if (!res.ok) throw { status: res.status };
-    const blob = await res.blob();
+    const raw = await res.blob();
+    const blob = await withDurationForDownload(raw);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

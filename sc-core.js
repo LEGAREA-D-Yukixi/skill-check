@@ -977,6 +977,126 @@
     return /mp4/.test(mime || '') ? 'mp4' : 'webm';
   }
 
+  /* =========================================================
+     録画の長さをファイルに書き込む
+
+     MediaRecorder の webm には Duration が書かれない。
+     そのままだとどの再生環境でもシークバーが正しく動かないので、
+     録画後に EBML の Info へ Duration を挿入する。
+     Segment のサイズは unknown のため、Info のサイズだけ直せば足りる。
+     ========================================================= */
+
+  function ebmlVint(buf, pos, keepMarker) {
+    if (pos >= buf.length) return null;
+    const first = buf[pos];
+    if (first === 0) return null;
+    let len = 1;
+    for (let m = 0x80; m && !(first & m); m >>= 1) len++;
+    if (len > 8 || pos + len > buf.length) return null;
+    let val = keepMarker ? first : (first & (0xFF >> len));
+    for (let i = 1; i < len; i++) val = val * 256 + buf[pos + i];
+    return { val: val, len: len, hex: hexOf(buf, pos, len) };
+  }
+
+  function hexOf(buf, pos, len) {
+    let s = '';
+    for (let i = 0; i < len; i++) s += ('0' + buf[pos + i].toString(16)).slice(-2);
+    return s.toUpperCase();
+  }
+
+  function isUnknownSize(buf, pos, len) {
+    if (buf[pos] !== (0x100 >> len)) return false;
+    for (let i = 1; i < len; i++) if (buf[pos + i] !== 0xFF) return false;
+    return true;
+  }
+
+  function writeVint(value) {
+    for (let len = 1; len <= 8; len++) {
+      if (value < Math.pow(2, 7 * len) - 1) {
+        const out = new Uint8Array(len);
+        let v = value;
+        for (let i = len - 1; i >= 0; i--) { out[i] = v % 256; v = Math.floor(v / 256); }
+        out[0] |= (0x80 >> (len - 1));
+        return out;
+      }
+    }
+    return null;
+  }
+
+  function insertDuration(buf, durationMs) {
+    let pos = 0;
+    const header = ebmlVint(buf, pos, true);
+    if (!header || header.hex !== '1A45DFA3') return null;
+    const headerSize = ebmlVint(buf, pos + header.len, false);
+    if (!headerSize) return null;
+    pos += header.len + headerSize.len + headerSize.val;
+
+    const seg = ebmlVint(buf, pos, true);
+    if (!seg || seg.hex !== '18538067') return null;
+    const segSize = ebmlVint(buf, pos + seg.len, false);
+    if (!segSize) return null;
+    let p = pos + seg.len + segSize.len;
+
+    while (p < buf.length) {
+      const id = ebmlVint(buf, p, true);
+      if (!id) return null;
+      const size = ebmlVint(buf, p + id.len, false);
+      if (!size) return null;
+      if (isUnknownSize(buf, p + id.len, size.len)) return null;
+      const dataStart = p + id.len + size.len;
+
+      if (id.hex === '1549A966') {                 // Info
+        const infoEnd = dataStart + size.val;
+        let scale = 1000000;                       // TimecodeScale の既定は1ミリ秒
+        let q = dataStart;
+        while (q < infoEnd) {
+          const cid = ebmlVint(buf, q, true);
+          if (!cid) break;
+          const csz = ebmlVint(buf, q + cid.len, false);
+          if (!csz) break;
+          const cdata = q + cid.len + csz.len;
+          if (cid.hex === '4489') return null;     // 既に書かれている
+          if (cid.hex === '2AD7B1') {
+            scale = 0;
+            for (let i = 0; i < csz.val; i++) scale = scale * 256 + buf[cdata + i];
+          }
+          q = cdata + csz.val;
+        }
+        if (!(scale > 0)) scale = 1000000;
+
+        const dur = new Uint8Array(11);
+        dur[0] = 0x44; dur[1] = 0x89; dur[2] = 0x88;
+        new DataView(dur.buffer).setFloat64(3, durationMs * 1000000 / scale, false);
+
+        const newSize = writeVint(size.val + dur.length);
+        if (!newSize) return null;
+        const out = new Uint8Array(buf.length + dur.length + (newSize.length - size.len));
+        let o = 0;
+        out.set(buf.subarray(0, p + id.len), o); o += p + id.len;
+        out.set(newSize, o); o += newSize.length;
+        out.set(dur, o); o += dur.length;
+        out.set(buf.subarray(dataStart), o);
+        return out;
+      }
+      p = dataStart + size.val;
+    }
+    return null;
+  }
+
+  // 失敗したら元の blob をそのまま返す（録画を失わないため）
+  async function withDuration(blob, durationMs) {
+    try {
+      if (!blob || !blob.size || !(durationMs > 0)) return blob;
+      if (!/webm/i.test(blob.type || '')) return blob;
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      const out = insertDuration(buf, durationMs);
+      return out ? new Blob([out], { type: blob.type }) : blob;
+    } catch (e) {
+      console.error('[SkillCheck] duration patch failed', e);
+      return blob;
+    }
+  }
+
   function createRecorder(stream, opts) {
     const o = opts || {};
     const mime = pickMime();
@@ -986,16 +1106,21 @@
       videoBitsPerSecond: o.bitrate || 150000,   // 低ビットレートで容量を抑える
     });
     const chunks = [];
+    let startedAt = 0;
     rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    const finish = function () {
+      const ms = startedAt ? Date.now() - startedAt : 0;
+      return withDuration(new Blob(chunks, { type: mime }), ms);
+    };
     return {
       mime: mime,
       // タイムスライスを外すと誤った長さ（0.001秒）が書かれるため指定する。
-      // 長さは管理画面側で実測する。
-      start: function () { rec.start(2000); },
+      // 正しい長さは stop 後に自分で書き込む。
+      start: function () { startedAt = Date.now(); rec.start(2000); },
       stop: function () {
         return new Promise(function (resolve) {
-          if (rec.state === 'inactive') { resolve(new Blob(chunks, { type: mime })); return; }
-          rec.onstop = function () { resolve(new Blob(chunks, { type: mime })); };
+          if (rec.state === 'inactive') { resolve(finish()); return; }
+          rec.onstop = function () { resolve(finish()); };
           try { rec.requestData(); } catch (e) {}
           rec.stop();
         });
@@ -1171,6 +1296,7 @@
     createComposer: createComposer,
     extFor: extFor,
     createRecorder: createRecorder,
+    withDuration: withDuration,
     createLogger: createLogger,
     uploadRecording: uploadRecording,
     bufToB64url: bufToB64url,
