@@ -200,6 +200,43 @@ Safari と Firefox は両APIとも未対応のため、**受験端末は Chrome 
 `navigator.mediaDevices.getUserMedia` で取得します。カメラが2台以上つながっている場合はTOP画面に選択欄が出て、
 外付けカメラを指定できます。選んだカメラは次回以降も記憶されます（`localStorage` の `sc_cam`）。
 
+### 受験記録の削除
+
+一覧の「削除」から、受験記録を丸ごと消せます。確認ダイアログに削除される中身を並べ、OKを押すと実行します。
+
+| 削除されるもの |
+|---|
+| 受験結果と選択式の解答（`sc_results`） |
+| 記述式の解答（`sc_code_answers`） |
+| 操作履歴（`sc_logs`） |
+| 受験者情報（`sc_sessions`） |
+| サーバー上の録画（Storage） |
+
+録画を「保存」でダウンロードした直後にも、**サーバー上の録画だけを消すか**を確認します。
+消すと容量が空き、受験結果・解答・操作履歴はそのまま残ります。
+
+### 残り容量
+
+管理画面の上部に録画の使用量を表示します。`video_bytes` の合計を `STORAGE_LIMIT_MB`（既定1024MB）と
+比べたもので、残量・録画の件数・あと何件入るかの目安を出します。
+使用率が70%を超えると黄色、90%を超えると赤になります。
+
+### 削除に必要な権限
+
+削除は管理者（ログイン済み）だけが行えます。セットアップ時に次のSQLを流してください。
+
+```sql
+grant delete on public.sc_results, public.sc_code_answers, public.sc_logs, public.sc_sessions to authenticated;
+
+create policy sc_results_del on public.sc_results      for delete to authenticated using (public.sc_is_admin());
+create policy sc_code_del    on public.sc_code_answers for delete to authenticated using (public.sc_is_admin());
+create policy sc_logs_del    on public.sc_logs         for delete to authenticated using (public.sc_is_admin());
+create policy sc_sess_del    on public.sc_sessions     for delete to authenticated using (public.sc_is_admin());
+
+create policy sc_rec_del on storage.objects for delete to authenticated
+  using (bucket_id = 'sc-recordings' and public.sc_is_admin());
+```
+
 ### 管理画面での審査
 
 一覧の「審査する」から、録画の再生・操作ログの再生・記述解答の確認・採点ができます。

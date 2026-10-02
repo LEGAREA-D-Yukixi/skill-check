@@ -36,6 +36,7 @@ window.SC_CONFIG = {
   RECORD_WIDTH: 480,       // カメラ側の取得解像度
   RECORD_FPS: 8,
   RECORDING_BUCKET: 'sc-recordings',
+  STORAGE_LIMIT_MB: 1024,  // 管理画面に出す容量の上限（Supabase無料枠は1GB）
 
   /* ---- 表示 ---- */
   ORG_NAME: '株式会社LEGAREA',

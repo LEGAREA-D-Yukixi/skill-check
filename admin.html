@@ -58,6 +58,12 @@ p.lead{color:var(--muted);font-size:13px;margin-top:5px}
 .stat{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff}
 .stat b{display:block;font-size:24px;font-weight:800;line-height:1.2}
 .stat span{font-size:11.5px;color:var(--blue-300);letter-spacing:.06em}
+.stat.cap{grid-column:span 2}
+.stat .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.18);margin-top:7px;overflow:hidden}
+.stat .bar > i{display:block;height:100%;width:0;background:#6ee7b7;transition:width .3s}
+.stat .bar > i.warn{background:#fbbf24}
+.stat .bar > i.full{background:#fca5a5}
+.stat em{display:block;font-style:normal;font-size:11px;color:#9fb4dd;margin-top:5px}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{padding:11px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
 th{font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;white-space:nowrap;background:#f7f9fd;position:sticky;top:0}
@@ -73,6 +79,7 @@ tbody tr:hover{background:#f7faff}
 .pill.d{background:#eaf0fb;color:#1d4ed8}
 .linkish{background:none;border:none;color:var(--blue);font-weight:700;cursor:pointer;font-size:13px;padding:0}
 .linkish:hover{text-decoration:underline}
+.linkish.del{color:var(--ng)}
 
 /* 審査パネル */
 .panel{position:fixed;inset:0;background:rgba(6,16,38,.75);display:none;z-index:45;padding:18px;overflow:auto}
@@ -173,6 +180,10 @@ tbody tr:hover{background:#f7faff}
       <div class="stat"><span>平均（審査済）</span><b id="st-avg">—</b></div>
       <div class="stat"><span>合格率</span><b id="st-rate">0%</b></div>
       <div class="stat"><span>未審査</span><b id="st-rev">0</b></div>
+      <div class="stat cap"><span>録画の使用量</span><b id="st-cap">—</b>
+        <div class="bar"><i id="st-bar"></i></div>
+        <em id="st-cap-sub"></em>
+      </div>
     </div>
     <div class="card"><div class="pad">
       <div class="toolbar">
@@ -189,7 +200,7 @@ tbody tr:hover{background:#f7faff}
         <table>
           <thead><tr>
             <th>受験日時</th><th>氏名</th><th>生年月日</th><th>言語</th>
-            <th>選択式</th><th>記述式</th><th>合計</th><th>所要</th><th>録画</th><th></th>
+            <th>選択式</th><th>記述式</th><th>合計</th><th>所要</th><th>録画</th><th></th><th></th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
@@ -400,6 +411,7 @@ function render(){
       '<td class="auth-ic">'+(r.video_path?('あり'+(r.video_bytes?' '+Math.round(r.video_bytes/1024/1024*10)/10+'MB':'')):'なし')+'</td>' +
       '<td><button class="linkish" data-open="'+esc(r.id)+'">'+(r.code_total?'審査する':'詳細')+'</button>'
         + (r.video_path?' <button class="linkish" data-dl="'+esc(r.id)+'">保存</button>':'') + '</td>' +
+      '<td><button class="linkish del" data-del="'+esc(r.id)+'">削除</button></td>' +
     '</tr>';
   }).join('');
   Array.prototype.forEach.call($('rows').querySelectorAll('[data-open]'), function(b){
@@ -408,6 +420,10 @@ function render(){
   Array.prototype.forEach.call($('rows').querySelectorAll('[data-dl]'), function(b){
     b.onclick = function(){ downloadVideo(b.dataset.dl, b); };
   });
+  Array.prototype.forEach.call($('rows').querySelectorAll('[data-del]'), function(b){
+    b.onclick = function(){ deleteResult(b.dataset.del, b); };
+  });
+  renderCapacity();
 }
 
 function toCsv(){
@@ -701,6 +717,86 @@ async function loadVideo(row){
   }
 }
 
+/* ---- 容量 ---- */
+function fmtMB(bytes){
+  const mb = (bytes || 0) / 1024 / 1024;
+  return (mb >= 100 ? Math.round(mb) : Math.round(mb * 10) / 10) + 'MB';
+}
+
+function renderCapacity(){
+  const limitMB = C.STORAGE_LIMIT_MB == null ? 1024 : C.STORAGE_LIMIT_MB;
+  const used = rows.reduce(function(a, r){ return a + (r.video_bytes || 0); }, 0);
+  const limit = limitMB * 1024 * 1024;
+  const pct = limit ? Math.min(100, used / limit * 100) : 0;
+  const n = rows.filter(function(r){ return r.video_path; }).length;
+  $('st-cap').textContent = fmtMB(used);
+  $('st-bar').style.width = pct + '%';
+  $('st-bar').className = pct >= 90 ? 'full' : (pct >= 70 ? 'warn' : '');
+  const left = Math.max(0, limit - used);
+  const avg = n ? used / n : 0;
+  $('st-cap-sub').textContent = '残り ' + fmtMB(left) + ' / ' + limitMB + 'MB　録画 ' + n + '件'
+    + (avg ? '（あと約' + Math.floor(left / avg) + '件）' : '');
+}
+
+/* ---- 削除 ---- */
+async function delStorage(videoPath){
+  if (!videoPath) return true;
+  const bucket = String(videoPath).split('/')[0];
+  const path = String(videoPath).replace(/^[^/]+\//, '');
+  const res = await fetch(BASE() + '/storage/v1/object/' + bucket + '/' + path, {
+    method: 'DELETE', headers: auth(),
+  });
+  if (!res.ok && res.status !== 404){
+    console.error('[SkillCheck] storage delete failed', res.status, await res.text().catch(function(){ return ''; }));
+    return false;
+  }
+  return true;
+}
+
+async function delRows(table, query){
+  const res = await fetch(BASE() + '/rest/v1/' + table + '?' + query, {
+    method: 'DELETE',
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, auth()),
+  });
+  if (!res.ok){
+    console.error('[SkillCheck] delete failed', table, res.status, await res.text().catch(function(){ return ''; }));
+    throw { status: res.status, table: table };
+  }
+}
+
+async function deleteResult(resultId, btn){
+  const row = rows.find(function(r){ return r.id === resultId; });
+  if (!row) return;
+  const msg = '次の受験記録をすべて削除します。元に戻せません。\n\n'
+    + '氏名：' + row.candidate_name + '\n'
+    + '言語：' + row.lang_label + '\n'
+    + '受験：' + fmtDate(row.created_at) + '\n\n'
+    + '削除されるもの\n'
+    + '・受験結果と選択式の解答\n'
+    + '・記述式の解答' + (row.code_total ? '（' + row.code_total + '問）' : '') + '\n'
+    + '・操作履歴\n'
+    + '・受験者情報\n'
+    + '・サーバー上の録画' + (row.video_path ? '（' + fmtMB(row.video_bytes) + '）' : '（なし）');
+  if (!confirm(msg)) return;
+
+  const label = btn ? btn.textContent : '';
+  if (btn){ btn.textContent = '削除中…'; btn.disabled = true; }
+  try{
+    const okVideo = await delStorage(row.video_path);
+    await delRows('sc_code_answers', 'result_id=eq.' + resultId);
+    await delRows('sc_logs', 'result_id=eq.' + resultId);
+    await delRows('sc_results', 'id=eq.' + resultId);
+    if (row.session_id) await delRows('sc_sessions', 'id=eq.' + row.session_id);
+    rows = rows.filter(function(r){ return r.id !== resultId; });
+    render();
+    if (!okVideo) alert('記録は削除しましたが、録画ファイルの削除に失敗しました。Storageの権限を確認してください。');
+  }catch(e){
+    if (btn){ btn.textContent = label; btn.disabled = false; }
+    alert('削除できませんでした（コード ' + (e && e.status) + '）。'
+      + (e && e.status === 403 ? '削除の権限がありません。' : '') + '詳細はコンソールを確認してください。');
+  }
+}
+
 /* ---- 一覧からの録画ダウンロード ---- */
 async function downloadVideo(resultId, btn){
   const row = rows.find(function(r){ return r.id === resultId; });
@@ -719,6 +815,26 @@ async function downloadVideo(resultId, btn){
       .join('_').replace(/[\\/:*?"<>|\s]/g, '_') + '.' + (/mp4/.test(blob.type) ? 'mp4' : 'webm');
     a.click();
     URL.revokeObjectURL(url);
+
+    // 保存できたので、サーバー上の録画を消すか確認する
+    if (confirm('録画を保存しました。\n\nサーバー上の録画（' + fmtMB(row.video_bytes) + '）を削除しますか。\n'
+              + '受験結果・解答・操作履歴は残ります。')){
+      if (await delStorage(row.video_path)){
+        const res2 = await fetch(BASE() + '/rest/v1/sc_results?id=eq.' + row.id, {
+          method:'PATCH',
+          headers: Object.assign({ 'Content-Type':'application/json', 'Prefer':'return=minimal' }, auth()),
+          body: JSON.stringify({ video_path: null, video_bytes: null, video_mime: null }),
+        });
+        if (res2.ok){
+          row.video_path = null; row.video_bytes = null; row.video_mime = null;
+          render();
+        } else {
+          alert('録画は削除しましたが、記録の更新に失敗しました');
+        }
+      } else {
+        alert('録画を削除できませんでした。Storageの権限を確認してください。');
+      }
+    }
   }catch(e){
     console.error('[SkillCheck] download failed', e);
     alert('録画を取得できませんでした');
