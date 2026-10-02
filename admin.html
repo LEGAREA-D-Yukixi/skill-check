@@ -96,10 +96,6 @@ tbody tr:hover{background:#f7faff}
 .vctl{display:flex;gap:11px;align-items:center;margin-top:10px}
 .vctl input[type=range]{flex:1;accent-color:var(--blue);height:5px}
 .vtime{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-.vrate{
-  font-size:12px;padding:5px 7px;border:1.5px solid var(--line);border-radius:8px;
-  background:#fff;color:var(--ink);
-}
 .vctl .sbtn{min-width:72px}
 .rec-empty{padding:24px 18px;text-align:center;color:var(--muted);font-size:13px;background:#f5f7fb;border-radius:12px;line-height:1.8}
 .rec-empty b{color:var(--ink);font-size:13.5px}
@@ -690,7 +686,7 @@ function paintPlayer(){
 }
 
 function bindPlayer(v){
-  const seek = $('v-seek'), play = $('v-play'), rate = $('v-rate');
+  const seek = $('v-seek'), play = $('v-play');
   P.vdrag = false;
   v.ontimeupdate = paintPlayer;
   v.onseeked = paintPlayer;
@@ -709,7 +705,6 @@ function bindPlayer(v){
     P.vdrag = false;
     paintPlayer();
   };
-  rate.onchange = function(){ v.playbackRate = parseFloat(rate.value) || 1; };
 }
 
 /* 保存する前に動画の長さを書き込む。
@@ -810,9 +805,6 @@ async function loadVideo(row){
       +   '<button class="sbtn" id="v-play">再生</button>'
       +   '<input type="range" id="v-seek" min="0" max="1000" step="1" value="0">'
       +   '<span class="vtime" id="v-time">0分00秒 / 0分00秒</span>'
-      +   '<select id="v-rate" class="vrate">'
-      +     '<option value="0.5">0.5倍</option><option value="1" selected>1倍</option>'
-      +     '<option value="1.5">1.5倍</option><option value="2">2倍</option></select>'
       + '</div>'
       + '<div class="rec-kind">' + esc(kind || '録画') + '　'
       + (row.video_bytes ? Math.round(row.video_bytes/1024/1024*10)/10 + 'MB' : '') + '</div>';
