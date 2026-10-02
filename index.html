@@ -179,6 +179,13 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
   display:flex;align-items:center;gap:10px;
 }
 .code-hint{margin-left:auto;font-weight:400;font-size:11.5px;color:var(--muted)}
+/* 選択式の正解。録画からは除外される */
+.ans-hint{
+  margin-top:16px;padding:12px 15px;border-radius:11px;
+  background:#eef3fa;border:1.5px solid #d7e2f1;color:#4a5f82;
+  font-size:14px;font-weight:700;
+}
+.ans-hint em{font-style:normal;font-weight:400;font-size:11.5px;color:var(--muted);margin-left:10px}
 .code-before{
   font-family:"SFMono-Regular",Menlo,Consolas,"Noto Sans Mono CJK JP",monospace;
   font-size:13px;line-height:1.7;tab-size:4;white-space:pre;overflow:auto;
@@ -329,6 +336,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
           <div class="qno" id="ex-qno">Q1</div>
           <div class="qtext" id="ex-q">—</div>
           <div class="choices" id="ex-choices"></div>
+          <div class="ans-hint" id="ex-hint" style="display:none"></div>
 
           <div class="code-wrap" id="ex-code" style="display:none">
             <div class="code-task" id="ex-task"></div>
@@ -343,7 +351,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
               <div class="edit-stack" id="ex-stack">
                 <pre class="code-ghost" id="ex-model" aria-hidden="true"></pre>
                 <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
-                          autocomplete="off" autocorrect="off" wrap="off"></textarea>
+                          autocomplete="off" autocorrect="off" wrap="off" lang="en"></textarea>
               </div>
             </div>
             <div class="btn-row" style="margin-top:12px">
@@ -493,6 +501,9 @@ async function ensureSession(){
 
 /* ---- 選択式の描画 ---- */
 function renderChoiceQ(item, n){
+  // 正解の表示。録画には映らない
+  $('ex-hint').innerHTML = '正解：' + String.fromCharCode(65 + item.answer) + '. '
+    + esc(item.choices[item.answer]) + '<em>この欄は録画に残りません</em>';
   $('ex-choices').innerHTML = item.choices.map(function(t,i){
     const sel = state.answers[state.cur] === i;
     return '<button class="choice'+(sel?' sel':'')+'" data-i="'+i+'">' +
@@ -528,6 +539,10 @@ function renderCodeQ(item){
     refreshDots();
   };
   ed.onpaste = function(){ state.log.add('paste', { qid:item.qid }); };
+  // 変換候補はOSが描くので要素として掴めない。変換中だけ除外範囲を広げて逃がす
+  ed.oncompositionstart = function(){ state.composing = true; };
+  ed.oncompositionend   = function(){ state.composing = false; };
+  ed.onblur = function(){ state.composing = false; };
   ed.onscroll = function(){
     const g = $('ex-model');
     g.scrollTop = ed.scrollTop; g.scrollLeft = ed.scrollLeft;
@@ -769,14 +784,33 @@ async function startRecording(){
       calib: function(){ return state.screenCalib; },
       maskPad: state.screenCalib ? 8 : 4,
       maskEl: function(){
-        // 記述問題を表示している間だけ、解答欄を描画から除外する。
-        // 模範解答は薄い文字として重なっているため、まとめて抜いたうえで入力内容を描き直す。
-        const st = $('ex-stack');
-        return (st && st.offsetHeight > 0 && $('ex-code').style.display !== 'none') ? st : null;
+        // 記述問題は解答欄ごと（模範解答が薄い文字で重なっているため）、
+        // 選択式は正解の表示欄を、録画から除外する
+        if ($('ex-code').style.display !== 'none'){
+          const st = $('ex-stack');
+          return (st && st.offsetHeight > 0) ? st : null;
+        }
+        if ($('ex-hint').style.display !== 'none'){
+          const hn = $('ex-hint');
+          return (hn && hn.offsetHeight > 0) ? hn : null;
+        }
+        return null;
       },
-      paintMask: paintAnswerField,
+      maskGrow: function(){
+        // 日本語入力の変換候補はOSが解答欄のすぐ下に描くため、要素として掴めない。
+        // 解答欄を操作している間は下方向へ広げて、まとめて録画から外す。
+        const ed = $('ex-edit');
+        if (!ed) return null;
+        const active = state.composing || document.activeElement === ed;
+        return active ? { bottom: 240, left: 24, right: 24 } : null;
+      },
+      paintMask: function(ctx, rect, scale, el){
+        // 解答欄だけは入力内容を描き直す。正解の表示欄は白いままでよい
+        if (el === $('ex-stack')) paintAnswerField(ctx, rect, scale);
+      },
     });
     state.composer.start();
+    window.__recCanvas = state.composer.canvas;   /* 確認用 */
     // 映像が流れ始めるのを待ってから録画を開始する（空の動画を防ぐ）
     for (let i = 0; i < 20 && !state.composer.ready(); i++){
       await new Promise(function(r){ setTimeout(r, 100); });
@@ -848,6 +882,7 @@ function renderQ(){
   $('ex-qno').textContent = 'Q' + (state.cur+1) + (isCode ? '（記述）' : '（選択）');
   $('ex-q').textContent = isCode ? item.t : item.q;
   $('ex-choices').style.display = isCode ? 'none' : '';
+  $('ex-hint').style.display    = isCode ? 'none' : '';
   $('ex-code').style.display = isCode ? '' : 'none';
   $('exam-grid').classList.toggle('has-model', isCode);
 

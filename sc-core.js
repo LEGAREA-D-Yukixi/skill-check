@@ -727,6 +727,17 @@
     if (v.parentNode) v.parentNode.removeChild(v);
   }
 
+  /* 除外範囲を広げる。
+     日本語入力の変換候補はOSが描くため要素として取れない。
+     変換中だけ下方向に広げて録画から外す。 */
+  function growRect(r, growFn) {
+    const g = (growFn && growFn()) || null;
+    if (!g) return r;
+    const l = g.left || 0, t = g.top || 0, rt = g.right || 0, b = g.bottom || 0;
+    return { left: r.left - l, top: r.top - t,
+             width: r.width + l + rt, height: r.height + t + b };
+  }
+
   // screenVideo は startScreenCapture が返した video 要素をそのまま渡す
   function createComposer(screenVideo, camStream, opts) {
     const o = opts || {};
@@ -739,6 +750,7 @@
     const cropped = !!o.cropped;        // ブラウザ側で既に絞り込み済みか
     const getCalib = o.calib || null;   // 画面全体のときの「表示領域→映像」の対応
     const maskEl  = o.maskEl || null;   // 録画から除外する要素を返す関数
+    const maskGrow = o.maskGrow || null; // 除外範囲を広げる量（CSSピクセル）
     const paintMask = o.paintMask || null;  // 除外した場所に描き直す処理（任意）
     const cvid = camStream ? videoFrom(camStream) : null;
     let timer = null;
@@ -766,16 +778,19 @@
         const holes2 = [];
         const me2 = maskEl ? maskEl() : null;
         if (me2) {
-          const mr = me2.getBoundingClientRect();
-          if (!mr.width || !mr.height) return;
+          const mr0 = me2.getBoundingClientRect();
+          if (!mr0.width || !mr0.height) return;
+          const mr = growRect(mr0, maskGrow);
           const v = toV2(mr);
+          const v0 = toV2(mr0);
           const s2 = Math.min(w / vw, h / vh);
           const dx2 = (w - vw * s2) / 2, dy2 = (h - vh * s2) / 2;
           const pad2 = (o.maskPad == null ? 22 : o.maskPad) * Math.min(cal.kx, cal.ky) * s2;
           holes2.push({ x: dx2 + v.x * s2 - pad2, y: dy2 + v.y * s2 - pad2,
                         w: v.w * s2 + pad2 * 2, h: v.h * s2 + pad2 * 2,
-                        // 描き直し用。余白を含まない実際の矩形
-                        rect: { x: dx2 + v.x * s2, y: dy2 + v.y * s2, w: v.w * s2, h: v.h * s2 } });
+                        el: me2,
+                        // 描き直し用。広げた分も余白も含まない実際の矩形
+                        rect: { x: dx2 + v0.x * s2, y: dy2 + v0.y * s2, w: v0.w * s2, h: v0.h * s2 } });
         }
         const s2 = Math.min(w / vw, h / vh);
         const dw2 = vw * s2, dh2 = vh * s2;
@@ -796,7 +811,7 @@
               ctx.beginPath();
               ctx.rect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
               ctx.clip();
-              try { paintMask(ctx, holes2[i].rect || holes2[i], Math.min(cal.kx, cal.ky) * s2); } catch (e) {}
+              try { paintMask(ctx, holes2[i].rect || holes2[i], Math.min(cal.kx, cal.ky) * s2, holes2[i].el); } catch (e) {}
               ctx.restore();
             }
           }
@@ -841,17 +856,20 @@
       const holes = [];
       const me = maskEl ? maskEl() : null;
       if (me) {
-        const mr = me.getBoundingClientRect();
-        if (!mr.width || !mr.height) return;   // 位置を特定できない＝描かない
+        const mr0 = me.getBoundingClientRect();
+        if (!mr0.width || !mr0.height) return;   // 位置を特定できない＝描かない
+        const mr = growRect(mr0, maskGrow);
         const v = toVideo(mr);
+        const v0 = toVideo(mr0);
         const pad = (o.maskPad == null ? 22 : o.maskPad) * Math.min(kx, ky) * s;
         holes.push({
           x: dx + (v.x - sx) * s - pad,
           y: dy + (v.y - sy) * s - pad,
           w: v.w * s + pad * 2,
           h: v.h * s + pad * 2,
-          // 描き直し用。余白を含まない実際の矩形
-          rect: { x: dx + (v.x - sx) * s, y: dy + (v.y - sy) * s, w: v.w * s, h: v.h * s },
+          el: me,
+          // 描き直し用。広げた分も余白も含まない実際の矩形
+          rect: { x: dx + (v0.x - sx) * s, y: dy + (v0.y - sy) * s, w: v0.w * s, h: v0.h * s },
         });
       }
 
@@ -877,7 +895,7 @@
             ctx.beginPath();
             ctx.rect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
             ctx.clip();
-            try { paintMask(ctx, holes[i].rect || holes[i], Math.min(kx, ky) * s); } catch (e) {}
+            try { paintMask(ctx, holes[i].rect || holes[i], Math.min(kx, ky) * s, holes[i].el); } catch (e) {}
             ctx.restore();
           }
         }
@@ -897,6 +915,7 @@
       }
     }
     return {
+      canvas: cv,                      // 確認用
       stream: cv.captureStream(fps),
       start: function () { draw(); timer = setInterval(draw, Math.round(1000 / fps)); },
       stop: function () {
