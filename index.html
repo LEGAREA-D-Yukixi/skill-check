@@ -206,8 +206,9 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
 }
 .code-edit{
   position:relative;background:transparent;color:var(--ink);
-  resize:none;display:block;caret-color:var(--blue);
+  resize:none;display:block;caret-color:var(--blue);cursor:text;
 }
+.code-edit:read-only{cursor:text}
 .code-edit:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(29,78,216,.12)}
 
 /* ===== 録画インジケータ ===== */
@@ -351,7 +352,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
               <div class="edit-stack" id="ex-stack">
                 <pre class="code-ghost" id="ex-model" aria-hidden="true"></pre>
                 <textarea class="code-edit" id="ex-edit" spellcheck="false" autocapitalize="off"
-                          autocomplete="off" autocorrect="off" wrap="off" lang="en"></textarea>
+                          autocomplete="off" autocorrect="off" wrap="off" lang="en" readonly></textarea>
               </div>
             </div>
             <div class="btn-row" style="margin-top:12px">
@@ -529,48 +530,97 @@ function renderCodeQ(item){
   // 模範解答の分量に合わせて解答欄の高さを決める
   const lines = String(item.answer).split('\n').length;
   $('ex-stack').style.height = Math.max(150, Math.min(400, lines * 24 + 40)) + 'px';
+
   const ed = $('ex-edit');
+  ed.readOnly = true;          // 日本語入力の対象にしないための要（下の説明を参照）
   ed.value = state.answers[state.cur] == null ? '' : state.answers[state.cur];
-  ed.oninput = null;
   state.log.resetSnapshot();
+
+  /* 解答欄は readonly にしてある。
+     OSの日本語入力は「編集できる入力欄」に対してだけ変換を始めるため、
+     readonly にすると変換候補そのものが出ない。
+     そのうえで打鍵を自分で拾って文字を差し込む。 */
+  function commit(value, caret){
+    const v = toAscii(value);
+    ed.value = v;
+    try { ed.setSelectionRange(caret, caret); } catch (e) {}
+    state.answers[state.cur] = v;
+    state.log.snapshot(item.qid, v);
+    refreshDots();
+  }
+
+  ed.onkeydown = function(e){
+    if (e.isComposing || e.key === 'Process') { e.preventDefault(); return; }
+
+    if (e.metaKey || e.ctrlKey){
+      const k = String(e.key).toLowerCase();
+      if (k === 'v'){            // 貼り付けは禁止（写経のため）
+        e.preventDefault();
+        state.log.add('paste_blocked', { qid: item.qid });
+        toast('解答欄への貼り付けはできません');
+      }
+      return;                    // コピーや全選択などは既定のまま
+    }
+
+    const s0 = ed.selectionStart, s1 = ed.selectionEnd, v = ed.value;
+    if (e.key === 'Backspace'){
+      e.preventDefault();
+      if (s0 !== s1) commit(v.slice(0, s0) + v.slice(s1), s0);
+      else if (s0 > 0) commit(v.slice(0, s0 - 1) + v.slice(s0), s0 - 1);
+    } else if (e.key === 'Delete'){
+      e.preventDefault();
+      if (s0 !== s1) commit(v.slice(0, s0) + v.slice(s1), s0);
+      else commit(v.slice(0, s0) + v.slice(s0 + 1), s0);
+    } else if (e.key === 'Enter'){
+      e.preventDefault();
+      commit(v.slice(0, s0) + '\n' + v.slice(s1), s0 + 1);
+    } else if (e.key === 'Tab'){
+      e.preventDefault();
+      commit(v.slice(0, s0) + '    ' + v.slice(s1), s0 + 4);
+    } else if (e.key.length === 1){
+      e.preventDefault();
+      const ch = toAscii(e.key);
+      if (ch) commit(v.slice(0, s0) + ch + v.slice(s1), s0 + ch.length);
+      else toast('解答欄は半角英数のみ入力できます');
+    } else if (/^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End)$/.test(e.key)){
+      e.preventDefault();
+      const from = (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Home') ? s0 : s1;
+      const to = caretAt(v, from, e.key);
+      if (e.shiftKey){
+        const anchor = (from === s0) ? s1 : s0;
+        ed.setSelectionRange(Math.min(anchor, to), Math.max(anchor, to));
+      } else {
+        ed.setSelectionRange(to, to);
+      }
+    }
+  };
+
+  // readonly でも念のため残す。想定外の経路で文字が入っても半角に揃える
   ed.oninput = function(){
-    if (enforceAscii(ed)) toast('解答欄は半角英数のみ入力できます');
+    enforceAscii(ed);
     state.answers[state.cur] = ed.value;
     state.log.snapshot(item.qid, ed.value);
     refreshDots();
   };
-  ed.onpaste = function(){
-    state.log.add('paste', { qid:item.qid });
-    setTimeout(function(){ enforceAscii(ed); }, 0);
+  ed.onpaste = function(e){
+    e.preventDefault();
+    state.log.add('paste_blocked', { qid: item.qid });
+    toast('解答欄への貼り付けはできません');
   };
-  // 日本語入力が始まったら即座に打ち切る。変換候補が開いたままにならない
-  ed.oncompositionstart = function(){
-    const keep = toAscii(ed.value), pos = ed.selectionStart;
-    ed.blur();
-    setTimeout(function(){
-      ed.value = keep;
-      ed.focus();
-      try { ed.setSelectionRange(pos, pos); } catch (e) {}
-    }, 0);
-    toast('解答欄は半角英数のみ入力できます');
-  };
-  ed.oncompositionend = function(){ enforceAscii(ed); };
+  ed.ondrop = function(e){ e.preventDefault(); };
+
   ed.onscroll = function(){
     const g = $('ex-model');
     g.scrollTop = ed.scrollTop; g.scrollLeft = ed.scrollLeft;
   };
   ed.scrollTop = 0; $('ex-model').scrollTop = 0;
   $('btn-reset-code').onclick = function(){
-    ed.value = '';
-    state.answers[state.cur] = '';
     state.log.add('reset', { qid:item.qid });
-    state.log.snapshot(item.qid, '');
-    refreshDots();
+    commit('', 0);
     ed.focus();
   };
 }
 
-/* 回答済みかどうか。記述式は元コードから変化していれば回答済みとみなす */
 function isAnswered(i){
   const q = state.exam[i];
   if (q.kind === 'code') return SC.normalizeCode(state.answers[i]).length > 0;
@@ -639,6 +689,31 @@ function toAscii(v){
     .replace(/[！-～]/g, function(c){ return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
     .replace(/\u3000/g, ' ')
     .replace(/[^\t\n\x20-\x7E]/g, '');
+}
+
+/* readonly の入力欄ではキャレットがキー操作で動かないため、移動も自分で計算する */
+function caretAt(v, s, key){
+  const lineStart = v.lastIndexOf('\n', Math.max(0, s - 1)) + 1;
+  const nl = v.indexOf('\n', s);
+  const lineEnd = nl < 0 ? v.length : nl;
+  const col = s - lineStart;
+  if (key === 'ArrowLeft')  return Math.max(0, s - 1);
+  if (key === 'ArrowRight') return Math.min(v.length, s + 1);
+  if (key === 'Home')       return lineStart;
+  if (key === 'End')        return lineEnd;
+  if (key === 'ArrowUp'){
+    if (lineStart === 0) return 0;
+    const prevStart = v.lastIndexOf('\n', lineStart - 2) + 1;
+    return prevStart + Math.min(col, lineStart - 1 - prevStart);
+  }
+  if (key === 'ArrowDown'){
+    if (lineEnd >= v.length) return v.length;
+    const nextStart = lineEnd + 1;
+    const n2 = v.indexOf('\n', nextStart);
+    const nextEnd = n2 < 0 ? v.length : n2;
+    return nextStart + Math.min(col, nextEnd - nextStart);
+  }
+  return s;
 }
 
 function enforceAscii(ed){
