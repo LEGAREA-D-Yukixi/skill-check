@@ -730,6 +730,29 @@
   /* 除外範囲を広げる。
      日本語入力の変換候補はOSが描くため要素として取れない。
      変換中だけ下方向に広げて録画から外す。 */
+
+  /* 穴を埋める色は、映像に描かれた周囲の画素から拾う。
+     固定色で塗ると、映像側の白と微妙に違って境目が見えてしまうため。 */
+  function pickFill(ctx, w, h, hole, fallback) {
+    const pts = [
+      [hole.x - 5, hole.y + hole.h / 2],
+      [hole.x + hole.w + 5, hole.y + hole.h / 2],
+      [hole.x + hole.w / 2, hole.y - 5],
+      [hole.x + hole.w / 2, hole.y + hole.h + 5],
+    ];
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const x = Math.round(pts[i][0]), y = Math.round(pts[i][1]);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      try {
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        r += d[0]; g += d[1]; b += d[2]; n++;
+      } catch (e) { /* 読めない場合は既定色 */ }
+    }
+    if (!n) return fallback || '#ffffff';
+    return 'rgb(' + Math.round(r / n) + ',' + Math.round(g / n) + ',' + Math.round(b / n) + ')';
+  }
+
   /* 画面の映像は数フレーム遅れて届く。
      いま測った位置で描くと、動いた直後だけ映像と合わず一瞬ずれて見える。
      そこで位置の履歴を持ち、映像が写しているであろう少し前の位置を使う。
@@ -757,7 +780,7 @@
     const w = o.width || 720, h = o.height || 450, fps = o.fps || 5;
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
-    const ctx = cv.getContext('2d');
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
     const sv = screenVideo || null;
     const areaEl  = o.areaEl || null;   // 録画してよい範囲
     const cropped = !!o.cropped;        // ブラウザ側で既に絞り込み済みか
@@ -801,8 +824,8 @@
           const s2 = Math.min(w / vw, h / vh);
           const dx2 = (w - vw * s2) / 2, dy2 = (h - vh * s2) / 2;
           const pad2 = (o.maskPad == null ? 22 : o.maskPad) * Math.min(cal.kx, cal.ky) * s2;
-          holes2.push({ x: dx2 + v.x * s2 - pad2, y: dy2 + v.y * s2 - pad2,
-                        w: v.w * s2 + pad2 * 2, h: v.h * s2 + pad2 * 2,
+          holes2.push({ x: Math.round(dx2 + v.x * s2 - pad2), y: Math.round(dy2 + v.y * s2 - pad2),
+                        w: Math.round(v.w * s2 + pad2 * 2), h: Math.round(v.h * s2 + pad2 * 2),
                         el: me2,
                         // 描き直し用。広げた分も余白も含まない実際の矩形
                         rect: { x: dx2 + v0.x * s2, y: dy2 + v0.y * s2, w: v0.w * s2, h: v0.h * s2 } });
@@ -818,8 +841,10 @@
         ctx.drawImage(video, 0, 0, vw, vh, dx2, dy2, dw2, dh2);
         ctx.restore();
         if (holes2.length) {
-          ctx.fillStyle = o.maskFill || '#ffffff';
-          for (let i = 0; i < holes2.length; i++) ctx.fillRect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
+          for (let i = 0; i < holes2.length; i++) {
+            ctx.fillStyle = pickFill(ctx, w, h, holes2[i], o.maskFill);
+            ctx.fillRect(holes2[i].x, holes2[i].y, holes2[i].w, holes2[i].h);
+          }
           if (paintMask) {
             for (let i = 0; i < holes2.length; i++) {
               ctx.save();
@@ -879,10 +904,10 @@
         const v0 = toVideo(mr0);
         const pad = (o.maskPad == null ? 22 : o.maskPad) * Math.min(kx, ky) * s;
         holes.push({
-          x: dx + (v.x - sx) * s - pad,
-          y: dy + (v.y - sy) * s - pad,
-          w: v.w * s + pad * 2,
-          h: v.h * s + pad * 2,
+          x: Math.round(dx + (v.x - sx) * s - pad),
+          y: Math.round(dy + (v.y - sy) * s - pad),
+          w: Math.round(v.w * s + pad * 2),
+          h: Math.round(v.h * s + pad * 2),
           el: me,
           // 描き直し用。広げた分も余白も含まない実際の矩形
           rect: { x: dx + (v0.x - sx) * s, y: dy + (v0.y - sy) * s, w: v0.w * s, h: v0.h * s },
@@ -901,8 +926,8 @@
 
       // 抜いた場所は地色で埋め、必要なら呼び出し側に描き直してもらう
       if (holes.length) {
-        ctx.fillStyle = o.maskFill || '#ffffff';
         for (let i = 0; i < holes.length; i++) {
+          ctx.fillStyle = pickFill(ctx, w, h, holes[i], o.maskFill);
           ctx.fillRect(holes[i].x, holes[i].y, holes[i].w, holes[i].h);
         }
         if (paintMask) {

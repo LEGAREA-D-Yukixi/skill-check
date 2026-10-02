@@ -348,7 +348,7 @@ p.lead{color:var(--muted);font-size:13.5px;margin-top:6px}
             </div>
 
             <div class="code-panel">
-              <div class="code-label">解答欄<span class="code-hint">半角英数のみ</span></div>
+              <div class="code-label">解答欄</div>
               <!-- 模範解答は薄い文字として重ねる。録画時は canvas で抜き、入力内容だけ描き直す -->
               <div class="edit-stack" id="ex-stack">
                 <pre class="code-ghost" id="ex-model" aria-hidden="true"></pre>
@@ -762,26 +762,31 @@ function paintAnswerField(ctx, r, scale){
   const ed = $('ex-edit');
   if (!ed) return;
   const cs = getComputedStyle(ed);
+  // 地色を持っているのは薄い文字の層なので、そこから色だけを読む（文字列は読まない）
+  const ghostStyle = getComputedStyle($('ex-model'));
   const fs = parseFloat(cs.fontSize) || 13.5;
   const lh = parseFloat(cs.lineHeight) || fs * 1.72;
   const pl = parseFloat(cs.paddingLeft) || 16;
   const pt = parseFloat(cs.paddingTop) || 14;
-  const bw = (parseFloat(cs.borderTopWidth) || 1.5) * scale;
+  // 枠線は整数ピクセルに合わせる。半端な太さだと2pxににじんで実画面と違って見える
+  const bw = Math.max(1, Math.round((parseFloat(cs.borderTopWidth) || 1.5) * scale));
   const br = (parseFloat(cs.borderTopLeftRadius) || 11) * scale;
+  const rx = Math.round(r.x), ry = Math.round(r.y);
+  const rw = Math.round(r.w), rh = Math.round(r.h);
 
   // 入力中の外側の光も再現する
   if (document.activeElement === ed){
-    const g = 4 * scale;
+    const g = Math.round(4 * scale);
     ctx.beginPath();
-    roundRect(ctx, r.x - g, r.y - g, r.w + g * 2, r.h + g * 2, br + g);
+    roundRect(ctx, rx - g, ry - g, rw + g * 2, rh + g * 2, br + g);
     ctx.fillStyle = 'rgba(29,78,216,.12)';
     ctx.fill();
   }
 
   // 実際の解答欄と同じ色・角丸で描く
-  roundRect(ctx, r.x + bw / 2, r.y + bw / 2, r.w - bw, r.h - bw, Math.max(0, br - bw / 2));
-  ctx.fillStyle = cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)'
-    ? cs.backgroundColor : '#fbfcfe';
+  roundRect(ctx, rx + bw / 2, ry + bw / 2, rw - bw, rh - bw, Math.max(0, br - bw / 2));
+  ctx.fillStyle = (ghostStyle.backgroundColor && ghostStyle.backgroundColor !== 'rgba(0, 0, 0, 0)')
+    ? ghostStyle.backgroundColor : '#fbfcfe';
   ctx.fill();
   ctx.strokeStyle = cs.borderTopColor || '#dde5f2';
   ctx.lineWidth = bw;
@@ -789,18 +794,24 @@ function paintAnswerField(ctx, r, scale){
 
   // 入力内容。枠の内側だけに描く
   ctx.save();
-  roundRect(ctx, r.x + bw, r.y + bw, r.w - bw * 2, r.h - bw * 2, Math.max(0, br - bw));
+  roundRect(ctx, rx + bw, ry + bw, rw - bw * 2, rh - bw * 2, Math.max(0, br - bw));
   ctx.clip();
   ctx.fillStyle = cs.color || '#16223f';
   ctx.font = (fs * scale) + 'px ' + cs.fontFamily;
-  ctx.textBaseline = 'top';
+  // CSSの行ボックスと同じ位置に置く。
+  // 行の高さの余りを上下に分け、その下にベースラインが来る。
+  ctx.textBaseline = 'alphabetic';
+  const m = ctx.measureText('M');
+  const asc = m.fontBoundingBoxAscent || fs * scale * 0.8;
+  const desc = m.fontBoundingBoxDescent || fs * scale * 0.2;
+  const half = (lh * scale - (asc + desc)) / 2;
   const lines = String(ed.value || '').replace(/\t/g, '    ').split('\n');
-  const x = r.x + (pl - ed.scrollLeft) * scale;
-  const top = r.y + (pt - ed.scrollTop) * scale;
+  const x = rx + (pl - ed.scrollLeft) * scale;
+  const base = ry + (pt - ed.scrollTop) * scale + half + asc;
   for (let i = 0; i < lines.length; i++){
-    const y = top + i * lh * scale;
-    if (y > r.y + r.h) break;
-    if (y + lh * scale < r.y) continue;
+    const y = base + i * lh * scale;
+    if (y - asc > ry + rh) break;
+    if (y + desc < ry) continue;
     ctx.fillText(lines[i], x, y);
   }
   ctx.restore();
