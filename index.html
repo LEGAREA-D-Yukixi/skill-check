@@ -479,7 +479,7 @@ function renderLangs(){
           (sc!=null ? '<span class="score">'+esc(sc)+'点</span>' : '') +
           '<span class="tag">'+esc(l.tag)+'</span>' +
           '<span class="nm">'+esc(l.label)+'</span>' +
-          '<span class="sub">全'+n+'問（選択'+nc+' / 記述'+nw+'）</span>' +
+          '<span class="sub">全'+n+'問（選択'+nc+' / 記述'+nw+'）　目安 '+esc(C.TIME_GUIDE || '15〜20分')+'</span>' +
           '<span class="go">›</span></button>';
       }).join('') + '</div></div>';
   }).join('');

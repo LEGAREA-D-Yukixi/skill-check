@@ -15,6 +15,7 @@ window.SC_CONFIG = {
   CODE_COUNT: 6,           // 1言語あたりの記述式（写経）の出題数
   CHOICE_POINT: 10,        // 選択式1問あたりの配点
   CODE_MAX: 10,            // 記述式1問あたりの満点（管理画面で採点）
+  TIME_GUIDE: '15〜20分',   // 言語一覧に出す所要時間の目安
   PASS_LINE: 70,           // 合格ライン（合計点に対する割合％）
   SHUFFLE_QUESTIONS: true, // 問題順をシャッフル
   SHUFFLE_CHOICES: true,   // 選択肢順をシャッフル
