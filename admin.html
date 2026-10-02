@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjM2Y3ZWUzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTUyZDU0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNyIgZm9udC13ZWlnaHQ9IjcwMCIgbGV0dGVyLXNwYWNpbmc9IjAuNSIgZmlsbD0iI2Y1OWUwYiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TEc8L3RleHQ+PC9zdmc+">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjM2Y3ZWUzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTUyZDU0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNyIgZm9udC13ZWlnaHQ9IjcwMCIgbGV0dGVyLXNwYWNpbmc9IjAuNSIgZmlsbD0iI2Y1OWUwYiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TFI8L3RleHQ+PC9zdmc+">
 <title>SkillCheck 管理 — 株式会社LEGAREA</title>
 <style>
 :root{
@@ -93,6 +93,14 @@ tbody tr:hover{background:#f7faff}
 .panel-body{padding:22px;display:grid;grid-template-columns:330px 1fr;gap:22px;align-items:start}
 @media(max-width:900px){.panel-body{grid-template-columns:1fr}}
 .rec-box video{width:100%;border-radius:12px;background:#0b1730;display:block}
+.vctl{display:flex;gap:11px;align-items:center;margin-top:10px}
+.vctl input[type=range]{flex:1;accent-color:var(--blue);height:5px}
+.vtime{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.vrate{
+  font-size:12px;padding:5px 7px;border:1.5px solid var(--line);border-radius:8px;
+  background:#fff;color:var(--ink);
+}
+.vctl .sbtn{min-width:72px}
 .rec-empty{padding:24px 18px;text-align:center;color:var(--muted);font-size:13px;background:#f5f7fb;border-radius:12px;line-height:1.8}
 .rec-empty b{color:var(--ink);font-size:13.5px}
 .rec-kind{margin-top:8px;font-size:11.5px;color:var(--muted);text-align:center}
@@ -149,7 +157,7 @@ tbody tr:hover{background:#f7faff}
 <body>
 <div class="wrap">
   <div class="brand">
-    <div class="mark">LG</div>
+    <div class="mark">LR</div>
     <div><b>SkillCheck 管理</b><span>受験結果一覧</span></div>
   </div>
 
@@ -636,6 +644,74 @@ function renderChoiceAnswers(){
     + '<p class="sec" style="margin-top:18px">記述式</p>';
 }
 
+/* MediaRecorder の webm には長さが書かれていないため、
+   ブラウザは duration を Infinity とみなす。
+   末尾までシークして実際の長さを測る。 */
+function probeDuration(v){
+  return new Promise(function(resolve){
+    let done = false;
+    const onKnown = function(){
+      if (isFinite(v.duration) && v.duration > 0) finish();
+    };
+    const finish = function(){
+      if (done) return;
+      done = true;
+      v.removeEventListener('durationchange', onKnown);
+      v.removeEventListener('seeked', onKnown);
+      const d = (isFinite(v.duration) && v.duration > 0) ? v.duration : 0;
+      try { v.currentTime = 0; } catch (e) {}
+      resolve(d);
+    };
+    const start = function(){
+      if (isFinite(v.duration) && v.duration > 0){ finish(); return; }
+      // 末尾までシークさせると、そこで実際の長さが確定する
+      v.addEventListener('durationchange', onKnown);
+      v.addEventListener('seeked', onKnown);
+      try { v.currentTime = 1e7; } catch (e) { finish(); return; }
+      setTimeout(finish, 6000);
+    };
+    if (v.readyState >= 1) start();
+    else v.addEventListener('loadedmetadata', start, { once: true });
+  });
+}
+
+function videoDuration(){
+  const v = $('p-video');
+  if (P.vdur) return P.vdur;
+  return (v && isFinite(v.duration) && v.duration > 0) ? v.duration : 0;
+}
+
+function paintPlayer(){
+  const v = $('p-video'), seek = $('v-seek'), time = $('v-time');
+  if (!v || !seek || !time) return;
+  const d = videoDuration();
+  time.textContent = fmtDur(v.currentTime * 1000) + ' / ' + fmtDur(d * 1000);
+  if (!P.vdrag && d > 0) seek.value = Math.round(v.currentTime / d * 1000);
+}
+
+function bindPlayer(v){
+  const seek = $('v-seek'), play = $('v-play'), rate = $('v-rate');
+  P.vdrag = false;
+  v.ontimeupdate = paintPlayer;
+  v.onseeked = paintPlayer;
+  v.onplay  = function(){ play.textContent = '一時停止'; };
+  v.onpause = function(){ play.textContent = '再生'; };
+  v.onended = function(){ play.textContent = '再生'; };
+  play.onclick = function(){ if (v.paused) v.play(); else v.pause(); };
+  seek.oninput = function(){
+    P.vdrag = true;
+    const d = videoDuration();
+    $('v-time').textContent = fmtDur(seek.value / 1000 * d * 1000) + ' / ' + fmtDur(d * 1000);
+  };
+  seek.onchange = function(){
+    const d = videoDuration();
+    if (d > 0){ try { v.currentTime = seek.value / 1000 * d; } catch (e) {} }
+    P.vdrag = false;
+    paintPlayer();
+  };
+  rate.onchange = function(){ v.playbackRate = parseFloat(rate.value) || 1; };
+}
+
 /* 録画が残っていない理由をログから拾う */
 const UPLOAD_JA = {
   '-1':  'ネットワークに接続できません',
@@ -707,9 +783,22 @@ async function loadVideo(row){
     P.videoName = [row.candidate_name, row.lang_label, String(row.created_at).slice(0,10)]
       .join('_').replace(/[\\/:*?"<>|\s]/g, '_') + '.' + (/mp4/.test(blob.type) ? 'mp4' : 'webm');
     const kind = (P.events.find(function(e){ return e.type === 'rec_start'; }) || {}).kind || '';
-    $('p-rec').innerHTML = '<video controls playsinline src="' + P.videoUrl + '"></video>'
+    $('p-rec').innerHTML = '<video id="p-video" playsinline></video>'
+      + '<div class="vctl">'
+      +   '<button class="sbtn" id="v-play">再生</button>'
+      +   '<input type="range" id="v-seek" min="0" max="1000" step="1" value="0">'
+      +   '<span class="vtime" id="v-time">0分00秒 / 0分00秒</span>'
+      +   '<select id="v-rate" class="vrate">'
+      +     '<option value="0.5">0.5倍</option><option value="1" selected>1倍</option>'
+      +     '<option value="1.5">1.5倍</option><option value="2">2倍</option></select>'
+      + '</div>'
       + '<div class="rec-kind">' + esc(kind || '録画') + '　'
       + (row.video_bytes ? Math.round(row.video_bytes/1024/1024*10)/10 + 'MB' : '') + '</div>';
+    const v = $('p-video');
+    v.src = P.videoUrl;
+    bindPlayer(v);
+    P.vdur = await probeDuration(v);   // 録画には長さが書かれていないので実測する
+    paintPlayer();
     $('p-dl').style.display = '';
   }catch(e){
     console.error('[SkillCheck] video load failed', e);

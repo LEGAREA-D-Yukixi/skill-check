@@ -989,6 +989,8 @@
     rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
     return {
       mime: mime,
+      // タイムスライスを外すと誤った長さ（0.001秒）が書かれるため指定する。
+      // 長さは管理画面側で実測する。
       start: function () { rec.start(2000); },
       stop: function () {
         return new Promise(function (resolve) {
